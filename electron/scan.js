@@ -2,6 +2,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { collectTokenUsage } = require("./tokens");
+
+const cwdCache = new Map();
 
 function home() {
   return os.homedir();
@@ -112,9 +115,10 @@ function reconstructHyphenPath(encoded) {
 }
 
 function readJsonlCwd(file, maxLines = 40) {
+  if (cwdCache.has(file)) return cwdCache.get(file);
   try {
     const fd = fs.openSync(file, "r");
-    const buf = Buffer.alloc(16 * 1024);
+    const buf = Buffer.alloc(512 * 1024);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     fs.closeSync(fd);
     const text = buf.slice(0, n).toString("utf8");
@@ -131,18 +135,162 @@ function readJsonlCwd(file, maxLines = 40) {
         (o.payload && o.payload.cwd) ||
         (o.message && o.message.cwd) ||
         o.gitBranch && o.cwd;
-      if (typeof cwd === "string" && cwd.startsWith("/")) return cwd;
+      if (typeof cwd === "string" && cwd.startsWith("/")) {
+        cwdCache.set(file, cwd);
+        return cwd;
+      }
     }
   } catch {
     /* ignore */
   }
+  cwdCache.set(file, "");
   return "";
 }
 
+function readJson(file, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function readJsonlTail(file, maxBytes = 256 * 1024, maxRecords = 80) {
+  try {
+    const stat = fs.statSync(file);
+    const start = Math.max(0, stat.size - maxBytes);
+    const fd = fs.openSync(file, "r");
+    const buffer = Buffer.alloc(stat.size - start);
+    fs.readSync(fd, buffer, 0, buffer.length, start);
+    fs.closeSync(fd);
+    let text = buffer.toString("utf8");
+    if (start > 0) text = text.slice(text.indexOf("\n") + 1);
+    return text
+      .split("\n")
+      .filter(Boolean)
+      .slice(-maxRecords)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function messageParts(record) {
+  const content = record && record.message && record.message.content;
+  return Array.isArray(content) ? content : [];
+}
+
+function activity(status, label, reason, activityAt, confidence = "medium") {
+  return { status, label, reason, activityAt: activityAt || 0, confidence };
+}
+
 function classify({ mtime, online, now, workingWindowMs }) {
-  if (online && now - mtime <= workingWindowMs) return "working";
-  if (online) return "idle";
-  return "offline";
+  if (!online) return activity("offline", "未运行", "没有发现对应 Runtime 进程", mtime, "high");
+  if (now - mtime <= workingWindowMs) {
+    return activity("working", "活动中", "Session 数据刚刚更新", mtime, "medium");
+  }
+  return activity("idle", "闲置", "Runtime 在运行，但此 Session 没有近期活动", mtime, "medium");
+}
+
+function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
+  const mtime = statMtime(file);
+  if (!online) return classify({ mtime, online, now, workingWindowMs });
+  const age = now - mtime;
+  const recentSessionMs = 30 * 60 * 1000;
+  const pendingTurnMs = 6 * 60 * 60 * 1000;
+  if (age > pendingTurnMs) {
+    return activity("idle", "闲置", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
+  }
+  const records = readJsonlTail(file);
+  if (!records.length) return classify({ mtime, online, now, workingWindowMs });
+
+  if (runtime === "codex") {
+    let lifecycle = "";
+    let lifecycleIndex = -1;
+    records.forEach((record, index) => {
+      const type = record && record.payload && record.payload.type;
+      if (type === "task_started" || type === "task_complete" || type === "turn_aborted") {
+        lifecycle = type;
+        lifecycleIndex = index;
+      }
+    });
+    if (lifecycle === "task_started" && age <= pendingTurnMs) {
+      return activity("working", "执行中", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
+    }
+    if ((lifecycle === "task_complete" || lifecycle === "turn_aborted") && age <= recentSessionMs) {
+      return activity("waiting", "等你", "Codex 已完成最近一轮", mtime, "high");
+    }
+    const afterLifecycle = records.slice(lifecycleIndex + 1);
+    if (
+      age <= pendingTurnMs &&
+      afterLifecycle.some(
+        (record) =>
+          record.type === "response_item" &&
+          ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(
+            record.payload && record.payload.type
+          )
+      )
+    ) {
+      return activity("working", "调用工具", "Codex 最近事件是工具调用", mtime, "high");
+    }
+  }
+
+  const last = records[records.length - 1];
+  const parts = messageParts(last);
+  const partTypes = parts.map((part) => part && part.type).filter(Boolean);
+  const hasToolUse = partTypes.includes("tool_use");
+  const hasToolResult = partTypes.includes("tool_result");
+  const hasThinking = partTypes.includes("thinking");
+  const hasText = partTypes.includes("text");
+  const role = last.role || last.type;
+
+  if (runtime === "cursor") {
+    if (last.type === "turn_ended" && age <= recentSessionMs) {
+      return activity("waiting", "等你", "Cursor 已完成最近一轮", mtime, "high");
+    }
+    if (age <= pendingTurnMs && (hasToolUse || hasToolResult)) {
+      return activity("working", hasToolUse ? "调用工具" : "处理结果", "Cursor turn 尚未结束", mtime, "high");
+    }
+    if (age <= pendingTurnMs && role === "user") {
+      return activity("working", "正在响应", "收到用户消息，尚未记录 turn 结束", mtime, "high");
+    }
+    if (age <= recentSessionMs && role === "assistant" && hasText && !hasToolUse) {
+      return activity("waiting", "等你", "Cursor 最近一轮已给出回复", mtime, "medium");
+    }
+  }
+
+  if (runtime === "claude-code" || runtime === "claude-desktop") {
+    if (age <= pendingTurnMs && (hasToolUse || hasToolResult || hasThinking)) {
+      return activity(
+        "working",
+        hasToolUse ? "调用工具" : hasThinking ? "思考中" : "处理结果",
+        "Claude 最近事件仍在一个执行链中",
+        mtime,
+        "high"
+      );
+    }
+    if (age <= pendingTurnMs && last.type === "user") {
+      return activity("working", "正在响应", "Claude 已收到新消息", mtime, "medium");
+    }
+    if (age <= recentSessionMs && (last.type === "last-prompt" || (last.type === "assistant" && hasText))) {
+      return activity("waiting", "等你", "Claude 最近一轮已完成", mtime, "medium");
+    }
+  }
+
+  if (age <= workingWindowMs) {
+    return activity("working", "活动中", `${runtime} Session 数据刚刚更新`, mtime, "medium");
+  }
+  if (age <= recentSessionMs) {
+    return activity("waiting", "等你", "最近使用过，当前没有执行事件", mtime, "low");
+  }
+  return activity("idle", "闲置", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
 }
 
 function session({
@@ -156,8 +304,9 @@ function session({
   now,
   workingWindowMs,
   title,
+  activityHint,
 }) {
-  const status = classify({ mtime, online, now, workingWindowMs });
+  const state = activityHint || classify({ mtime, online, now, workingWindowMs });
   return {
     id: `${runtime}:${id}`,
     runtime,
@@ -166,7 +315,11 @@ function session({
     cwdName: cwd ? path.basename(cwd) : "未知目录",
     file: file || "",
     mtime: mtime || 0,
-    status,
+    status: state.status,
+    statusText: state.label,
+    statusReason: state.reason,
+    statusConfidence: state.confidence,
+    activityAt: state.activityAt || mtime || 0,
     title: title || "",
   };
 }
@@ -177,7 +330,7 @@ function detectCursor({ now, workingWindowMs, procs, cfg }) {
   if (!exists(root)) return [];
   const out = [];
   for (const project of fs.readdirSync(root)) {
-    if (project === "empty-window") continue;
+    if (project === "empty-window" || project.startsWith(".")) continue;
     const projectDir = path.join(root, project);
     const transcripts = path.join(projectDir, "agent-transcripts");
     let cwd = "";
@@ -218,8 +371,21 @@ function detectCursor({ now, workingWindowMs, procs, cfg }) {
       continue;
     }
     for (const sid of fs.readdirSync(transcripts)) {
-      const jsonl = path.join(transcripts, sid, `${sid}.jsonl`);
+      const sessionDir = path.join(transcripts, sid);
+      const jsonl = path.join(sessionDir, `${sid}.jsonl`);
       if (!exists(jsonl)) continue;
+      const activityFiles = walkFiles(sessionDir, (file) => file.endsWith(".jsonl"))
+        .sort((a, b) => statMtime(b) - statMtime(a))
+        .slice(0, 12);
+      const activityStates = activityFiles.map((file) => ({
+        file,
+        mtime: statMtime(file),
+        state: inferJsonlActivity("cursor", file, { online, now, workingWindowMs }),
+      }));
+      const workingState = activityStates.find(({ state }) => state.status === "working");
+      const newestState = activityStates[0];
+      const selected = workingState || newestState;
+      const mtime = newestState ? newestState.mtime : statMtime(jsonl);
       out.push(
         session({
           runtime: "cursor",
@@ -227,10 +393,11 @@ function detectCursor({ now, workingWindowMs, procs, cfg }) {
           id: sid,
           cwd,
           file: jsonl,
-          mtime: statMtime(jsonl),
+          mtime,
           online,
           now,
           workingWindowMs,
+          activityHint: selected && selected.state,
         })
       );
     }
@@ -262,6 +429,7 @@ function detectClaudeCode({ now, workingWindowMs, procs, cfg }) {
           online,
           now,
           workingWindowMs,
+          activityHint: inferJsonlActivity("claude-code", file, { online, now, workingWindowMs }),
         })
       );
     }
@@ -292,6 +460,10 @@ function detectClaudeDesktop({ now, workingWindowMs, procs, cfg }) {
         online,
         now,
         workingWindowMs,
+        activityHint:
+          newest && newest.endsWith(".jsonl")
+            ? inferJsonlActivity("claude-desktop", newest, { online, now, workingWindowMs })
+            : undefined,
       })
     );
   }
@@ -315,6 +487,7 @@ function detectCodex({ now, workingWindowMs, procs, cfg }) {
       online,
       now,
       workingWindowMs,
+      activityHint: inferJsonlActivity("codex", file, { online, now, workingWindowMs }),
     });
   });
 }
@@ -413,6 +586,57 @@ function detectPi({ now, workingWindowMs, procs, cfg }) {
       online,
       now,
       workingWindowMs,
+    });
+  });
+}
+
+function detectGrok({ now, workingWindowMs, procs, cfg }) {
+  const online = isOnline(procs, cfg.process);
+  const grokHome = expand(process.env.GROK_HOME || path.join(home(), ".grok"));
+  const root = path.join(grokHome, "sessions");
+  if (!exists(root)) return [];
+  const livePids = new Set(procs.map((process) => process.pid));
+  const activeSessions = new Map(
+    (readJson(path.join(grokHome, "active_sessions.json"), []) || [])
+      .filter((item) => item && item.session_id)
+      .map((item) => [item.session_id, item])
+  );
+  const summaries = walkFiles(root, (_file, name) => name === "summary.json")
+    .sort((a, b) => statMtime(b) - statMtime(a))
+    .slice(0, 120);
+
+  return summaries.map((summaryFile) => {
+    const summary = readJson(summaryFile, {}) || {};
+    const sessionDir = path.dirname(summaryFile);
+    const id = summary.info?.id || path.basename(sessionDir);
+    const updates = path.join(sessionDir, "updates.jsonl");
+    const signals = path.join(sessionDir, "signals.json");
+    const mtime = Math.max(statMtime(summaryFile), statMtime(updates), statMtime(signals));
+    const activeEntry = activeSessions.get(id);
+    const isRegisteredActive =
+      activeEntry && livePids.has(Number(activeEntry.pid)) && now - mtime <= 6 * 60 * 60 * 1000;
+    let state;
+    if (!online) {
+      state = activity("offline", "未运行", "没有发现 Grok Build 或 Grok Bot 进程", mtime, "high");
+    } else if (isRegisteredActive) {
+      state = activity("working", "执行中", "Grok active_sessions 记录该 Session 正在运行", mtime, "high");
+    } else if (now - mtime <= 30 * 60 * 1000) {
+      state = activity("waiting", "等你", "Grok Session 最近更新，当前没有活动执行记录", mtime, "medium");
+    } else {
+      state = activity("idle", "闲置", "Grok Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
+    }
+    return session({
+      runtime: "grok",
+      label: cfg.label,
+      id,
+      cwd: summary.info?.cwd || "",
+      file: exists(updates) ? updates : summaryFile,
+      mtime,
+      online,
+      now,
+      workingWindowMs,
+      title: summary.generated_title || "",
+      activityHint: state,
     });
   });
 }
@@ -555,7 +779,8 @@ function detectSimpleHome({ runtime, dir, globExts, now, workingWindowMs, procs,
 }
 
 function detectCustom(item, { now, workingWindowMs, procs }) {
-  const online = isOnline(procs, item.process || [item.id]);
+  const processNames = Array.isArray(item.process) ? item.process.filter(Boolean) : [];
+  const online = processNames.length ? isOnline(procs, processNames) : true;
   const globRoot = expand(item.glob || "");
   if (!globRoot) return [];
   const dir = globRoot.includes("*") ? globRoot.split("*")[0].replace(/\/$/, "") : globRoot;
@@ -565,19 +790,26 @@ function detectCustom(item, { now, workingWindowMs, procs }) {
     const ext = path.extname(globRoot.replace(/\*/g, ""));
     return !ext || p.endsWith(ext) || p.endsWith(".jsonl") || p.endsWith(".json");
   });
-  return files.slice(0, 80).map((file) =>
-    session({
+  return files.slice(0, 80).map((file) => {
+    const mtime = statMtime(file);
+    const activityHint = processNames.length
+      ? undefined
+      : now - mtime <= workingWindowMs
+        ? activity("working", "活动中", "未配置进程名，仅根据 Session 文件更新判断", mtime, "low")
+        : activity("idle", "闲置", "未配置进程名，无法确认 Runtime 是否仍在运行", mtime, "low");
+    return session({
       runtime: item.id,
       label: item.label || item.id,
       id: path.basename(file),
       cwd: readJsonlCwd(file),
       file,
-      mtime: statMtime(file),
+      mtime,
       online,
       now,
       workingWindowMs,
-    })
-  );
+      activityHint,
+    });
+  });
 }
 
 const BUILTIN = {
@@ -588,6 +820,7 @@ const BUILTIN = {
   gemini: detectGemini,
   opencode: detectOpenCode,
   pi: detectPi,
+  grok: detectGrok,
   aider: detectAider,
   continue: detectContinue,
   windsurf: detectWindsurf,
@@ -653,7 +886,8 @@ function scan(config) {
   const now = Date.now();
   const workingWindowMs = config.workingWindowMs || 25000;
   const maxOfflineAgeMs = config.maxOfflineAgeMs || 3 * 24 * 3600 * 1000;
-  const maxSessions = config.maxSessions || 60;
+  const maxSessions = config.maxSessions || 32;
+  const maxSessionsPerRuntime = config.maxSessionsPerRuntime || 8;
   const procs = snapshotProcesses();
   let rows = [];
 
@@ -692,14 +926,50 @@ function scan(config) {
     return now - (row.mtime || 0) <= maxOfflineAgeMs;
   });
 
-  const rank = { working: 0, idle: 1, offline: 2 };
+  const rank = { working: 0, waiting: 1, idle: 2, offline: 3 };
   rows.sort((a, b) => rank[a.status] - rank[b.status] || b.mtime - a.mtime);
+  const runtimeCounts = new Map();
+  rows = rows.filter((row) => {
+    const count = runtimeCounts.get(row.runtime) || 0;
+    if (count >= maxSessionsPerRuntime) return false;
+    runtimeCounts.set(row.runtime, count + 1);
+    return true;
+  });
   if (rows.length > maxSessions) rows = rows.slice(0, maxSessions);
 
-  const counts = { working: 0, idle: 0, offline: 0 };
-  for (const row of rows) counts[row.status] += 1;
-  const mood = counts.working > 0 ? "working" : counts.idle > 0 ? "waiting" : "offline";
-  return { rows, counts, mood, scannedAt: now };
+  let tokenUsage = {
+    tokens: 0,
+    sources: [],
+    sessions: {},
+    supportedRuntimes: ["codex", "claude-code", "grok", "gemini"],
+    collectedAt: now,
+  };
+  try {
+    const collected = collectTokenUsage(now);
+    const enabledRuntimes = new Set(
+      Object.entries(config.runtimes || {})
+        .filter(([, runtime]) => runtime && runtime.enabled !== false)
+        .map(([id]) => id)
+    );
+    const sources = collected.sources.filter((source) => enabledRuntimes.has(source.id));
+    tokenUsage = {
+      ...collected,
+      sources,
+      tokens: sources.reduce((sum, source) => sum + source.tokens, 0),
+    };
+    rows = rows.map((row) => ({
+      ...row,
+      tokensToday: tokenUsage.sessions[row.id] || 0,
+      tokenTracked: tokenUsage.supportedRuntimes.includes(row.runtime),
+    }));
+  } catch {
+    /* Token usage is optional; Session monitoring must continue if collection fails. */
+  }
+
+  const counts = { working: 0, waiting: 0, idle: 0, offline: 0 };
+  for (const row of rows) counts[row.status] = (counts[row.status] || 0) + 1;
+  const mood = counts.working > 0 ? "working" : counts.waiting + counts.idle > 0 ? "waiting" : "offline";
+  return { rows, counts, mood, tokenUsage, scannedAt: now };
 }
 
 if (require.main === module) {
@@ -707,4 +977,4 @@ if (require.main === module) {
   console.log(JSON.stringify(scan(loadConfig()), null, 2));
 }
 
-module.exports = { scan, snapshotProcesses, isOnline };
+module.exports = { scan, snapshotProcesses, isOnline, inferJsonlActivity };

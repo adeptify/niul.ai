@@ -2,16 +2,44 @@
   "name": "niul.ai",
   "productName": "牛来",
   "version": "0.1.0",
+  "author": "adeptify",
   "description": "macOS desktop pet that watches local AI runtime sessions",
   "main": "electron/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron ."
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "test": "node --test",
+    "pack": "env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac",
+    "dist": "env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "electron": "^37.2.6"
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ai.niul.desktop",
+    "productName": "牛来",
+    "artifactName": "niul.ai-${version}-${arch}.${ext}",
+    "asar": true,
+    "files": [
+      "assets/**/*",
+      "config/**/*",
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }

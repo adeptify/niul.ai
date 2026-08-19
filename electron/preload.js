@@ -4,6 +4,23 @@ contextBridge.exposeInMainWorld("niulai", {
   scan: () => ipcRenderer.invoke("scan"),
   getConfig: () => ipcRenderer.invoke("get-config"),
   saveConfig: (next) => ipcRenderer.invoke("save-config", next),
+  chooseDirectory: () => ipcRenderer.invoke("choose-directory"),
+  hideApp: () => ipcRenderer.invoke("hide-app"),
+  quitApp: () => ipcRenderer.invoke("quit-app"),
+  listMemos: () => ipcRenderer.invoke("list-memos"),
+  saveMemo: (memo) => ipcRenderer.invoke("save-memo", memo),
+  completeMemo: (id) => ipcRenderer.invoke("complete-memo", id),
   focusSession: (session) => ipcRenderer.invoke("focus-session", session),
   setIgnoreMouse: (ignore) => ipcRenderer.send("set-ignore-mouse", ignore),
+  moveWindow: (deltaX, deltaY) => ipcRenderer.send("move-window", deltaX, deltaY),
+  onRequestScan: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on("request-scan", handler);
+    return () => ipcRenderer.removeListener("request-scan", handler);
+  },
+  onMemoDue: (callback) => {
+    const handler = (_event, memo) => callback(memo);
+    ipcRenderer.on("memo-due", handler);
+    return () => ipcRenderer.removeListener("memo-due", handler);
+  },
 });
