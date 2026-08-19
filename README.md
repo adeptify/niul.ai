@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/niulai-product-logo-v1.png" width="128" height="128" alt="牛来">
+</p>
+
 # 牛来 / niul.ai
 
 macOS 桌宠：一头尽量还原电影《牛来》的业余手搓 3D 黄牛（短角、黄色短绒、紫灰色口鼻与手脚、半眯方眼、直立且动作僵硬）。它浮在桌面最上层，头顶气泡列出本机 AI Runtime / 桌面端 / CLI / 开源 Agent 的 Session。
