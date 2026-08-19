@@ -1,7 +1,7 @@
 {
   "name": "niul.ai",
   "productName": "牛来",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "adeptify",
   "description": "macOS desktop pet that watches local AI runtime sessions",
   "main": "electron/main.js",
