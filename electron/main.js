@@ -10,12 +10,19 @@ const {
   globalShortcut,
   Notification,
 } = require("electron");
+const { Worker } = require("node:worker_threads");
 const path = require("path");
 const { loadConfig, saveConfig } = require("./config");
-const { scan } = require("./scan");
 const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
-const { windowPositionForCursor } = require("./window-position");
+const {
+  windowPositionForCursor,
+  windowPositionForRectGrab,
+} = require("./window-position");
+const {
+  normalizeInteractiveRegions,
+  pointInInteractiveRegions,
+} = require("./pointer-regions");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
@@ -24,8 +31,14 @@ let tray;
 let config;
 let memoStore;
 let memoTimer;
+let mouseGuardTimer;
+let scanWorker;
+let scanInFlight;
+let scanRequestId = 0;
 let windowDrag = null;
 let ignoreMouseRequested = true;
+let mouseEventsIgnored = null;
+let interactiveRegions = [];
 let lastSnapshot = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -36,6 +49,7 @@ function showWindow() {
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.show();
+  applyIgnoreMouse(false);
   app.focus({ steal: true });
   win.focus();
 }
@@ -100,12 +114,56 @@ function createWindow() {
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.once("ready-to-show", () => win && win.showInactive());
+  win.on("closed", () => {
+    win = null;
+    mouseEventsIgnored = null;
+    interactiveRegions = [];
+  });
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 }
 
+function finishScan(message = {}) {
+  if (!scanInFlight || message.id !== scanInFlight.id) return;
+  const { resolve, reject } = scanInFlight;
+  scanInFlight = null;
+  if (message.snapshot) {
+    lastSnapshot = message.snapshot;
+    resolve(lastSnapshot);
+    return;
+  }
+  const error = new Error(message.error?.message || "Session scan failed");
+  if (lastSnapshot) resolve(lastSnapshot);
+  else reject(error);
+}
+
+function startScanWorker() {
+  if (scanWorker) return scanWorker;
+  scanWorker = new Worker(path.join(__dirname, "scan-worker.js"));
+  scanWorker.on("message", finishScan);
+  scanWorker.on("error", (error) => {
+    if (scanInFlight) finishScan({ id: scanInFlight.id, error: { message: error.message } });
+  });
+  scanWorker.on("exit", () => {
+    scanWorker = null;
+    if (scanInFlight) {
+      finishScan({ id: scanInFlight.id, error: { message: "Session scan worker stopped" } });
+    }
+  });
+  return scanWorker;
+}
+
 function snapshot() {
-  lastSnapshot = scan(config);
-  return lastSnapshot;
+  if (scanInFlight) return scanInFlight.promise;
+  const id = ++scanRequestId;
+  let resolve;
+  let reject;
+  const promise = new Promise((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  scanInFlight = { id, promise, resolve, reject };
+  startScanWorker().postMessage({ id, config });
+  return promise;
 }
 
 function displayWorkAreaNear(x, y) {
@@ -114,21 +172,48 @@ function displayWorkAreaNear(x, y) {
   return (display || screen.getPrimaryDisplay()).workArea;
 }
 
-function applyIgnoreMouse(ignore) {
-  if (!win) return;
-  win.setIgnoreMouseEvents(Boolean(ignore) && !windowDrag, { forward: true });
+function cursorIsOverInteractiveSurface() {
+  if (!win || !interactiveRegions.length) return true;
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = win.getBounds();
+  return pointInInteractiveRegions(
+    { x: cursor.x - bounds.x, y: cursor.y - bounds.y },
+    interactiveRegions,
+    8
+  );
 }
 
-function moveDraggedWindow(screenX, screenY) {
+function applyIgnoreMouse(ignore) {
+  if (!win || win.isDestroyed()) return;
+  const shouldIgnore = Boolean(ignore) && !windowDrag && !cursorIsOverInteractiveSurface();
+  if (mouseEventsIgnored === shouldIgnore) return;
+  mouseEventsIgnored = shouldIgnore;
+  win.setIgnoreMouseEvents(shouldIgnore, { forward: true });
+}
+
+function moveDraggedWindow(screenX, screenY, nextCowBounds) {
   if (!win || !windowDrag) return;
-  const next = windowPositionForCursor(
-    screenX,
-    screenY,
-    windowDrag.offsetX,
-    windowDrag.offsetY,
-    windowDrag.cowBounds,
-    displayWorkAreaNear(screenX, screenY)
-  );
+  const normalizedBounds = normalizeInteractiveRegions([nextCowBounds])[0];
+  if (normalizedBounds) windowDrag.cowBounds = normalizedBounds;
+  const cowBounds = windowDrag.cowBounds;
+  const workArea = displayWorkAreaNear(screenX, screenY);
+  const next = cowBounds
+    ? windowPositionForRectGrab(
+        screenX,
+        screenY,
+        windowDrag.grabX,
+        windowDrag.grabY,
+        cowBounds,
+        workArea
+      )
+    : windowPositionForCursor(
+        screenX,
+        screenY,
+        windowDrag.offsetX,
+        windowDrag.offsetY,
+        null,
+        workArea
+      );
   if (!next) return;
   if (windowDrag.lastX === next.x && windowDrag.lastY === next.y) return;
   windowDrag.lastX = next.x;
@@ -142,10 +227,12 @@ function beginWindowDrag(payload) {
   const originY = Number(payload.originY);
   if (!Number.isFinite(originX) || !Number.isFinite(originY)) return;
   const [wx, wy] = win.getPosition();
-  const cowBounds = payload.cowBounds && typeof payload.cowBounds === "object" ? payload.cowBounds : null;
+  const cowBounds = normalizeInteractiveRegions([payload.cowBounds])[0] || null;
   windowDrag = {
     offsetX: originX - wx,
     offsetY: originY - wy,
+    grabX: cowBounds ? originX - wx - cowBounds.x : 0,
+    grabY: cowBounds ? originY - wy - cowBounds.y : 0,
     cowBounds,
     lastX: wx,
     lastY: wy,
@@ -153,7 +240,9 @@ function beginWindowDrag(payload) {
   applyIgnoreMouse(false);
   const screenX = Number(payload.screenX);
   const screenY = Number(payload.screenY);
-  if (Number.isFinite(screenX) && Number.isFinite(screenY)) moveDraggedWindow(screenX, screenY);
+  if (Number.isFinite(screenX) && Number.isFinite(screenY)) {
+    moveDraggedWindow(screenX, screenY, cowBounds);
+  }
 }
 
 function endWindowDrag() {
@@ -168,6 +257,7 @@ app.whenReady().then(() => {
   createWindow();
   registerGlobalShortcut();
   memoTimer = setInterval(announceDueMemos, 15000);
+  mouseGuardTimer = setInterval(() => applyIgnoreMouse(ignoreMouseRequested), 50);
 
   const iconPath = path.join(__dirname, "..", "assets", "tray-template.svg");
   const icon = nativeImage.createFromPath(iconPath);
@@ -221,10 +311,18 @@ app.whenReady().then(() => {
     ignoreMouseRequested = Boolean(ignore);
     applyIgnoreMouse(ignoreMouseRequested);
   });
+  ipcMain.on("set-interactive-regions", (_e, regions) => {
+    interactiveRegions = normalizeInteractiveRegions(regions);
+    applyIgnoreMouse(ignoreMouseRequested);
+  });
   ipcMain.on("start-window-drag", (_e, payload) => beginWindowDrag(payload));
   ipcMain.on("move-window-drag", (_e, payload) => {
     if (!payload) return;
-    moveDraggedWindow(Number(payload.screenX), Number(payload.screenY));
+    moveDraggedWindow(
+      Number(payload.screenX),
+      Number(payload.screenY),
+      payload.cowBounds
+    );
   });
   ipcMain.on("end-window-drag", endWindowDrag);
 });
@@ -234,4 +332,6 @@ app.on("activate", showWindow);
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   if (memoTimer) clearInterval(memoTimer);
+  if (mouseGuardTimer) clearInterval(mouseGuardTimer);
+  scanWorker?.terminate();
 });

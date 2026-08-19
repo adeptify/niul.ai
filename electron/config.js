@@ -48,7 +48,10 @@ function loadConfig(userDataDir) {
       "bubbleScale",
       "soundEnabled",
     ]) {
-      if (key in defaults) merged[key] = defaults[key];
+      if (!(key in user) && key in defaults) merged[key] = defaults[key];
+    }
+    if ((user.configVersion || 0) < 5 && Number(user.pollMs) === 2500) {
+      merged.pollMs = defaults.pollMs;
     }
     merged.configVersion = defaults.configVersion;
   }

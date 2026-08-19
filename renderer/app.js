@@ -217,6 +217,7 @@ function previewApi() {
     },
     focusSession: async () => true,
     setIgnoreMouse: noop,
+    setInteractiveRegions: noop,
     startWindowDrag: noop,
     moveWindowDrag: noop,
     endWindowDrag: noop,
@@ -244,11 +245,15 @@ localStorage.setItem("niulai.statusFilterVersion", STATUS_FILTER_VERSION);
 let config;
 let latestRows = [];
 let latestSnapshot = null;
+let lastListRenderKey = "";
 let draftCustom = [];
 let scanTimer;
+let tickInFlight = false;
 let captionTimer;
 let speakingTimer;
 let blinkTimer;
+let ambientMotionTimer;
+let ambientMotionEndTimer;
 let expressionTimer;
 let attentionTimer;
 let stateChangeTimer;
@@ -505,6 +510,39 @@ function scheduleBlink() {
     }
     scheduleBlink();
   }, 4200 + Math.random() * 3600);
+}
+
+function scheduleAmbientMotion(delay = 3200 + Math.random() * 2800) {
+  window.clearTimeout(ambientMotionTimer);
+  window.clearTimeout(ambientMotionEndTimer);
+  ambientMotionTimer = window.setTimeout(() => {
+    const stage = document.getElementById("cowStage");
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const isBusy =
+      !stage ||
+      document.hidden ||
+      pointerDown ||
+      stage.matches(
+        ".is-speaking, .is-observing-session, .is-state-changing, .is-petted, .is-rolling, .is-dragging"
+      );
+    if (isBusy) {
+      scheduleAmbientMotion(1800);
+      return;
+    }
+    const durationBySkin = {
+      study: 1600,
+      backpack: 1400,
+      dance: 1500,
+      football: 1500,
+    };
+    const duration =
+      durationBySkin[currentSkinId] || (mood === "working" ? 900 : mood === "offline" ? 1200 : 1100);
+    stage.classList.add("is-ambient-moving");
+    ambientMotionEndTimer = window.setTimeout(() => {
+      stage.classList.remove("is-ambient-moving");
+      scheduleAmbientMotion();
+    }, duration + 40);
+  }, delay);
 }
 
 function showCaption(message, duration = 1800, options = {}) {
@@ -812,10 +850,37 @@ function renderList(snapshot) {
   latestSnapshot = snapshot;
   latestRows = snapshot.rows;
   renderSummary(snapshot);
+  const renderKey = JSON.stringify({
+    minute: Math.floor(Date.now() / 60000),
+    rows: snapshot.rows.map((row) => [
+      row.id,
+      row.runtime,
+      row.label,
+      row.status,
+      row.statusText,
+      row.statusReason,
+      row.activityAt,
+      row.mtime,
+      row.cwd,
+      row.cwdName,
+      row.title,
+      row.file,
+      row.tokensToday,
+    ]),
+    tokens: snapshot.tokenUsage?.sources?.map((source) => [
+      source.id,
+      source.tokens,
+      source.estimatedTokens,
+      source.confidence,
+    ]),
+  });
+  if (renderKey === lastListRenderKey) return false;
+  lastListRenderKey = renderKey;
   renderTokenUsage(snapshot);
   renderStatusFilters(snapshot.rows);
   renderRuntimeFilters(snapshot.rows);
   renderSessionRows(snapshot);
+  return true;
 }
 
 async function openSession(id, element) {
@@ -895,7 +960,8 @@ function announceStatusChanges(previousRows, nextRows) {
 }
 
 async function tick() {
-  if (pointerDown?.dragging) return;
+  if (pointerDown?.dragging || tickInFlight) return;
+  tickInFlight = true;
   const beacon = document.getElementById("liveBeacon");
   beacon.classList.add("is-scanning");
   beacon.title = "正在扫描";
@@ -914,6 +980,7 @@ async function tick() {
     beacon.title = "扫描失败";
     showToast(`扫描失败：${error.message || error}`);
   } finally {
+    tickInFlight = false;
     beacon.classList.remove("is-scanning");
   }
 }
@@ -1097,28 +1164,42 @@ function bindCowInteraction() {
     }
   };
 
-  const queueDragMove = (screenX, screenY) => {
-    pendingCursor = { screenX, screenY };
+  const queueDragMove = (screenX, screenY, cowBounds) => {
+    pendingCursor = { screenX, screenY, cowBounds };
     if (dragFrame) return;
     dragFrame = requestAnimationFrame(() => {
       dragFrame = 0;
       const point = pendingCursor;
       pendingCursor = null;
       if (!pointerDown?.dragging || !point) return;
-      api.moveWindowDrag(point.screenX, point.screenY);
+      api.moveWindowDrag(point.screenX, point.screenY, point.cowBounds);
     });
   };
 
   const beginWindowDrag = (event) => {
     pointerDown.dragging = true;
     stage.classList.add("is-dragging");
+    const cowBounds = cowBoundsInWindow(stage);
     api.startWindowDrag({
       originX: pointerDown.screenX,
       originY: pointerDown.screenY,
       screenX: event.screenX,
       screenY: event.screenY,
-      cowBounds: cowBoundsInWindow(stage),
+      cowBounds,
     });
+  };
+
+  const updateCowDock = (screenY) => {
+    const availableTop = Number(window.screen.availTop || 0);
+    const availableHeight = Math.max(1, Number(window.screen.availHeight || window.innerHeight));
+    const verticalProgress = (screenY - availableTop) / availableHeight;
+    const isUpper = pet.classList.contains("is-cow-upper");
+    if ((!isUpper && verticalProgress < 0.7) || (isUpper && verticalProgress <= 0.8)) {
+      pet.classList.add("is-cow-upper");
+    } else {
+      pet.classList.remove("is-cow-upper");
+    }
+    return cowBoundsInWindow(stage);
   };
 
   stage.addEventListener("pointermove", (event) => {
@@ -1129,7 +1210,10 @@ function bindCowInteraction() {
         event.clientY - pointerDown.clientY
       );
       if (!pointerDown.dragging && distance > 4) beginWindowDrag(event);
-      if (pointerDown.dragging) queueDragMove(event.screenX, event.screenY);
+      if (pointerDown.dragging) {
+        const cowBounds = updateCowDock(event.screenY);
+        queueDragMove(event.screenX, event.screenY, cowBounds);
+      }
       return;
     }
 
@@ -1432,6 +1516,7 @@ function bindSettings() {
 }
 
 let passthroughLeaveTimer = 0;
+let interactiveRegionFrame = 0;
 
 function cancelPassthroughLeave() {
   window.clearTimeout(passthroughLeaveTimer);
@@ -1442,6 +1527,30 @@ function isOverInteractiveSurface() {
   return ["bubble", "cowStage", "quickMemo", "settings"].some((id) => {
     const element = document.getElementById(id);
     return Boolean(element?.matches(":hover"));
+  });
+}
+
+function syncInteractiveRegions() {
+  window.cancelAnimationFrame(interactiveRegionFrame);
+  interactiveRegionFrame = window.requestAnimationFrame(() => {
+    const regions = ["bubble", "cowStage", "quickMemo", "settings"].flatMap((id) => {
+      const element = document.getElementById(id);
+      if (!element || element.hidden) return [];
+      if (id === "settings" && !element.open) return [];
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return [];
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return [];
+      return [
+        {
+          x: Math.floor(rect.left),
+          y: Math.floor(rect.top),
+          width: Math.ceil(rect.width),
+          height: Math.ceil(rect.height),
+        },
+      ];
+    });
+    api.setInteractiveRegions(regions);
   });
 }
 
@@ -1476,6 +1585,17 @@ function armMousePassthrough() {
     element.addEventListener("mouseenter", enter);
     element.addEventListener("mouseleave", leave);
   }
+  const resizeObserver = new ResizeObserver(syncInteractiveRegions);
+  const mutationObserver = new MutationObserver(syncInteractiveRegions);
+  for (const element of interactive) {
+    resizeObserver.observe(element);
+    mutationObserver.observe(element, {
+      attributes: true,
+      attributeFilter: ["class", "hidden", "open", "style"],
+    });
+  }
+  window.addEventListener("resize", syncInteractiveRegions);
+  syncInteractiveRegions();
   api.setIgnoreMouse(true);
 }
 
@@ -1581,13 +1701,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     toggleBubble();
   });
 
-  const cowSources = new Set(
-    COW_SKINS.flatMap((skin) => [
-      ...(typeof skin.src === "string" ? [skin.src] : Object.values(skin.src)),
-      ...Object.values(skin.expressions || {}),
-    ])
-  );
-  await Promise.all([...cowSources].map(prepareCowFrame));
   await setCow("waiting", true);
   config = await api.getConfig();
   setCowSoundEnabled(config.soundEnabled !== false);
@@ -1596,5 +1709,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   await tick();
   scheduleScanning();
   scheduleBlink();
+  scheduleAmbientMotion();
   if (typeof api.onRequestScan === "function") api.onRequestScan(tick);
 });

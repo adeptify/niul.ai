@@ -66,6 +66,32 @@ textarea:focus-visible,
   pointer-events: none;
 }
 
+#pet.is-cow-upper {
+  justify-content: flex-start;
+  padding-top: 6px;
+  padding-bottom: 16px;
+}
+
+#pet.is-cow-upper .cow-stage {
+  order: -1;
+  margin-top: 0;
+  margin-bottom: 2px;
+}
+
+#pet.is-cow-upper .bubble {
+  transform-origin: 50% 0;
+}
+
+#pet.is-cow-upper .bubble.is-collapsed {
+  transform: translateY(-5px) scale(0.985);
+}
+
+#pet.is-cow-upper .bubble-tail {
+  top: -9px;
+  bottom: auto;
+  border-radius: 4px 0 0;
+}
+
 .bubble {
   position: relative;
   z-index: 4;
@@ -621,8 +647,8 @@ textarea:focus-visible,
 }
 
 .status-dot.working::after {
-  opacity: 0.35;
-  animation: workingRing 1.6s var(--ease-out) infinite;
+  opacity: 0.28;
+  transform: scale(0.78);
 }
 
 .status-dot.waiting {
@@ -633,7 +659,6 @@ textarea:focus-visible,
 .status-dot.idle {
   color: var(--idle);
   background: var(--idle);
-  animation: idleBreath 3.4s ease-in-out infinite;
 }
 
 .session-copy {
@@ -797,7 +822,6 @@ textarea:focus-visible,
   position: absolute;
   inset: 0;
   transform-origin: 50% 90%;
-  will-change: transform;
 }
 
 .cow-layer {
@@ -807,10 +831,12 @@ textarea:focus-visible,
   width: 100%;
   height: 100%;
   opacity: 0;
+  visibility: hidden;
 }
 
 .cow-layer.is-active {
   opacity: 1;
+  visibility: visible;
 }
 
 .cow-face-fx {
@@ -917,32 +943,32 @@ textarea:focus-visible,
   animation: cowFallbackMouth 270ms ease-in-out infinite;
 }
 
-#pet[data-mood="waiting"] .cow-motion {
-  animation: cowIdle 4.4s ease-in-out infinite;
+#pet[data-mood="waiting"] .cow-stage.is-ambient-moving .cow-motion {
+  animation: cowIdle 1.1s ease-in-out;
 }
 
-#pet[data-mood="working"] .cow-motion {
-  animation: cowWorking 1.5s ease-in-out infinite;
+#pet[data-mood="working"] .cow-stage.is-ambient-moving .cow-motion {
+  animation: cowWorking 900ms ease-in-out;
 }
 
-#pet[data-mood="offline"] .cow-motion {
-  animation: cowOffline 5.2s ease-in-out infinite;
+#pet[data-mood="offline"] .cow-stage.is-ambient-moving .cow-motion {
+  animation: cowOffline 1.2s ease-in-out;
 }
 
-#pet[data-skin="study"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
-  animation: cowStudy 5.2s ease-in-out infinite;
+#pet[data-skin="study"] .cow-stage.is-ambient-moving:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
+  animation: cowStudy 1.6s ease-in-out;
 }
 
-#pet[data-skin="backpack"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
-  animation: cowBackpack 4.8s ease-in-out infinite;
+#pet[data-skin="backpack"] .cow-stage.is-ambient-moving:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
+  animation: cowBackpack 1.4s ease-in-out;
 }
 
-#pet[data-skin="dance"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
-  animation: cowDance 3.2s ease-in-out infinite;
+#pet[data-skin="dance"] .cow-stage.is-ambient-moving:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
+  animation: cowDance 1.5s ease-in-out;
 }
 
-#pet[data-skin="football"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
-  animation: cowFootball 4.4s ease-in-out infinite;
+#pet[data-skin="football"] .cow-stage.is-ambient-moving:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
+  animation: cowFootball 1.5s ease-in-out;
 }
 
 #pet .cow-stage.is-state-changing .cow-motion {

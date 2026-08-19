@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   clampWindowToKeepRectVisible,
   windowPositionForCursor,
+  windowPositionForRectGrab,
 } = require("../electron/window-position");
 
 const workArea = { x: 0, y: 0, width: 1000, height: 800 };
@@ -45,6 +46,38 @@ test("places the window from the grab offset and then clamps", () => {
     x: -250,
     y: 220,
   });
+});
+
+test("keeps the grabbed point under the cursor when the cow flips above the bubble", () => {
+  const lowerCow = { x: 100, y: 600, width: 200, height: 200 };
+  const upperCow = { x: 100, y: 10, width: 200, height: 200 };
+  const cursor = { x: 500, y: 250 };
+  const grab = { x: 80, y: 90 };
+
+  assert.deepEqual(
+    windowPositionForRectGrab(
+      cursor.x,
+      cursor.y,
+      grab.x,
+      grab.y,
+      lowerCow,
+      workArea,
+      minVisible
+    ),
+    { x: 320, y: -440 }
+  );
+  assert.deepEqual(
+    windowPositionForRectGrab(
+      cursor.x,
+      cursor.y,
+      grab.x,
+      grab.y,
+      upperCow,
+      workArea,
+      minVisible
+    ),
+    { x: 320, y: 150 }
+  );
 });
 
 test("rejects non-finite cursor math", () => {

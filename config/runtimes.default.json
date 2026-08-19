@@ -1,6 +1,6 @@
 {
-  "configVersion": 4,
-  "pollMs": 2500,
+  "configVersion": 5,
+  "pollMs": 5000,
   "globalShortcut": "CommandOrControl+Shift+U",
   "cowScale": 1,
   "bubbleScale": 1,

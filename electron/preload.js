@@ -12,8 +12,10 @@ contextBridge.exposeInMainWorld("niulai", {
   completeMemo: (id) => ipcRenderer.invoke("complete-memo", id),
   focusSession: (session) => ipcRenderer.invoke("focus-session", session),
   setIgnoreMouse: (ignore) => ipcRenderer.send("set-ignore-mouse", ignore),
+  setInteractiveRegions: (regions) => ipcRenderer.send("set-interactive-regions", regions),
   startWindowDrag: (payload) => ipcRenderer.send("start-window-drag", payload),
-  moveWindowDrag: (screenX, screenY) => ipcRenderer.send("move-window-drag", { screenX, screenY }),
+  moveWindowDrag: (screenX, screenY, cowBounds) =>
+    ipcRenderer.send("move-window-drag", { screenX, screenY, cowBounds }),
   endWindowDrag: () => ipcRenderer.send("end-window-drag"),
   onRequestScan: (callback) => {
     const handler = () => callback();

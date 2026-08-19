@@ -46,8 +46,31 @@ function windowPositionForCursor(cursorX, cursorY, offsetX, offsetY, rect, workA
   return clampWindowToKeepRectVisible(cursorX - offsetX, cursorY - offsetY, rect, workArea, minVisible);
 }
 
+function windowPositionForRectGrab(
+  cursorX,
+  cursorY,
+  grabX,
+  grabY,
+  rect,
+  workArea,
+  minVisible
+) {
+  const keep = readBox(rect);
+  if (!keep || ![grabX, grabY].every(isFiniteNumber)) return null;
+  return windowPositionForCursor(
+    cursorX,
+    cursorY,
+    keep.x + grabX,
+    keep.y + grabY,
+    keep,
+    workArea,
+    minVisible
+  );
+}
+
 module.exports = {
   MIN_VISIBLE,
   clampWindowToKeepRectVisible,
   windowPositionForCursor,
+  windowPositionForRectGrab,
 };
