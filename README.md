@@ -15,13 +15,14 @@ A macOS always-on-top desktop pet. The character recreates the *Niu Lai* movie l
 | 透明无边框窗口，始终置顶，牛可拖动 | Transparent frameless window, always on top, the cow is draggable |
 | 气泡列出扫到的 Session：Runtime 名、状态、工作目录与判定依据 | Bubble lists runtime, state, working directory, and activity evidence |
 | 四态：工作中 / 等你 / 闲置 / 不在线 | States: **working** / **waiting** / **idle** / **offline** |
-| 牛会眨眼；说话时逐帧张嘴；悬停 Session 时明确抬头转向 | The cow blinks, speaks frame-by-frame, and visibly looks toward hovered sessions |
+| 牛会眨眼；说话有三段嘴型；悬停 Session 时经过中间帧抬头转向 | The cow blinks, speaks through three mouth frames, and turns toward hovered sessions through an in-between frame |
 | 单击牛展开/收起气泡；拖动移动；双击抚摸 | Click to toggle the bubble, drag to move, double-click to pet |
 | 右键牛打开本地快捷 Memo，可选 15 分钟、1 小时或明早提醒 | Right-click the cow for local quick memos and reminder presets |
 | 点一条只打开对应 Runtime App；项目名不会被误当成 App 或 Finder 目录 | Click a row to open its Runtime app, never the project name or Finder folder |
 | 状态与 Runtime 双重筛选，默认只展示“工作中” | Filter by status and Runtime; working sessions are shown by default |
 | 状态变化会触发带“哞”前缀的牛来播报 | State changes trigger a spoken cow notification prefixed with “哞” |
-| 今日 Token 精确读取 Codex、Claude Code、Grok Build、Gemini CLI；Cursor 不估算 | Exact local tokens for Codex, Claude Code, Grok Build, and Gemini CLI; Cursor is not estimated |
+| 碎嘴可关闭；快速连点牛五下会发现一个可再次连点取消的彩蛋 | Chatter can be muted; five quick clicks reveal a cancellable easter egg |
+| 今日 Token 只读取 Codex、Claude Code、Grok Build、Gemini CLI 的明确 usage；部分记录显示为下界，Cursor 不估算 | Today’s tokens use explicit local usage only; partial records are lower bounds, and Cursor is not estimated |
 | 设置里可分别缩放牛和 Session 气泡，并直接开关 Runtime | Scale the cow and bubble independently and toggle runtimes visually |
 | Roll 池包含九种牛来；电源菜单可收展、隐藏或彻底退出 | Roll among nine cows; the power menu can collapse, hide, or fully quit |
 
@@ -34,23 +35,17 @@ A macOS always-on-top desktop pet. The character recreates the *Niu Lai* movie l
 
 完整、按产品可执行的监控方案见 [docs/runtime-monitoring.md](docs/runtime-monitoring.md)。
 
-The full, per-product monitoring plan is in [docs/runtime-monitoring.md](docs/runtime-monitoring.md). Token accounting follows [TokenStep](https://github.com/Backtthefuture/TokenStep)'s local-first rule: explicit usage metadata only, with no text-length estimation.
+The full, per-product monitoring plan is in [docs/runtime-monitoring.md](docs/runtime-monitoring.md). Token accounting follows [TokenStep](https://github.com/Backtthefuture/TokenStep)'s local-first rule and [CC-Switch](https://github.com/farion1231/cc-switch)'s importer behavior: explicit usage only, cross-file deduplication, no text-length estimation, and no legacy Grok context estimate mixed into exact totals.
 
 ---
 
-## 一键安装 / One-click install
+## 安装与启动 / Install and run
 
-下载源码后双击 [`安装牛来.command`](安装牛来.command)。脚本会优先下载适合本机架构的 Release；没有 Release 时，如果本机有 Node.js，就自动从源码构建。安装位置是 `~/Applications/牛来.app`。
+需要 **macOS** 与 **Node 18+**。当前还没有已签名的 GitHub Release，请从源码安装。Requires macOS and Node 18+. There is no signed Release yet.
 
-运行期间按 **⌘⇧U** 可显示或隐藏桌宠。电源菜单里的“隐藏桌宠”仍保留菜单栏进程和快捷键；选择“彻底退出”后，需要从「应用程序」或 Spotlight 再次启动。
+### 先在终端里跑起来 / Run from source
 
-After downloading the source, double-click [`安装牛来.command`](安装牛来.command). It installs to `~/Applications/牛来.app`. Press **⌘⇧U** to show or hide the running pet.
-
-当前自动构建产物尚未配置 Apple Developer ID 签名与公证；首次启动时 macOS 可能要求在 Finder 中右键 App 后选择“打开”。正式分发前应在 Release workflow 中加入签名与 notarization。
-
-## 开发启动 / Development run
-
-需要 macOS 与 Node 18+。Requires macOS and Node 18+.
+在**已经能执行 `node -v`** 的终端里：
 
 ```bash
 git clone https://github.com/adeptify/niul.ai.git
@@ -59,9 +54,32 @@ npm install
 npm start
 ```
 
-第一次点击 Session 跳转时，macOS 可能要求给「辅助功能」权限（用来前置别的窗口）。
+不要只依赖双击：安装脚本启动的是非交互 shell，默认不会读 `~/.zshrc`。脚本会自己查找 nvm / Homebrew / Volta 里的 Node，但若你的 Node 只存在于当前终端会话，请在这个终端里继续操作。
 
-The first time you click a session, macOS may ask for Accessibility permission so the pet can bring another app to the front.
+If Node lives in nvm, run these commands in a terminal where `node -v` already works.
+
+### 装成可重复打开的 App / Install the app
+
+同一终端里：
+
+```bash
+zsh 安装牛来.command
+```
+
+也可以在 Finder 里打开 [`安装牛来.command`](安装牛来.command)。若系统提示无法验证开发者，对它**右键 → 打开**。
+
+脚本顺序：已有的 `dist` 构建产物 → GitHub Release（若有）→ 用本机 Node 从源码打包。安装位置是 **`~/Applications/牛来.app`**（用户主目录下的应用程序，**不是** `/Applications`）。
+
+The installer copies the app to `~/Applications/牛来.app`, not `/Applications`.
+
+### 装好之后 / After install
+
+- 用 Spotlight 搜「牛来」，或打开 `~/Applications/牛来.app`
+- 运行中按 **⌘⇧U** 显示或隐藏；电源菜单「隐藏桌宠」仍保留菜单栏和快捷键
+- 「彻底退出」或重启后不会自动回来，需要再打开一次
+- 当前构建没有 Apple Developer ID 签名。若打不开，在 Finder 里对 App **右键 → 打开**
+- 第一次点 Session 跳转时，macOS 可能要求给「辅助功能」权限（用来前置别的窗口）
+- 默认只展示「工作中」Session；列表为空时可切到「全部」，或点齿轮开关 Runtime
 
 扫一次（不启动窗口）/ Scan once without the window:
 

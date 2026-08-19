@@ -43,21 +43,28 @@ async function focusApplication(appName) {
   );
 }
 
-async function focusSession(session, runtimeCfg = {}) {
-  const appNames = [
+function runtimeAppNames(session, runtimeCfg = {}) {
+  return [
     ...(Array.isArray(runtimeCfg.focusApps) ? runtimeCfg.focusApps : []),
     runtimeCfg.focusApp,
     ...(RUNTIME_APP_ALIASES[session.runtime] || []),
   ].filter((name, index, values) => name && values.indexOf(name) === index);
+}
+
+async function focusSession(session, runtimeCfg = {}, operations = {}) {
+  const appNames = runtimeAppNames(session, runtimeCfg);
   const cwd = session.cwd;
+  const launchApplication =
+    operations.launchApplication || ((appName) => run("open", ["-a", appName]));
+  const focusRunningApplication = operations.focusApplication || focusApplication;
 
   for (const appName of appNames) {
-    if (await focusApplication(appName)) return true;
+    // `open -a` reliably activates the app's bundle. Merely setting a process
+    // `frontmost` can return success without actually raising its windows.
+    if (await launchApplication(appName)) return true;
   }
   for (const appName of appNames) {
-    // `open -a` focuses an existing instance and launches an installed app
-    // without requiring Accessibility permission.
-    if (await run("open", ["-a", appName])) return true;
+    if (await focusRunningApplication(appName)) return true;
   }
 
   // A Runtime with an app target must never fall through to Finder: the row
@@ -70,4 +77,4 @@ async function focusSession(session, runtimeCfg = {}) {
   return false;
 }
 
-module.exports = { focusSession };
+module.exports = { focusSession, runtimeAppNames };

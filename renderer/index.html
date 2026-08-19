@@ -18,6 +18,10 @@
     <main id="pet" data-mood="waiting">
       <section class="bubble" id="bubble" aria-label="AI Session 状态">
         <header class="bubble-head">
+          <div class="brand-lockup" aria-label="Niul.ai">
+            <img src="../assets/niulai-product-logo-v1.png" alt="" />
+            <span>Niul.ai</span>
+          </div>
           <button class="status-overview" id="toggleBubble" type="button" aria-expanded="true" aria-controls="bubbleBody">
             <span class="live-beacon" id="liveBeacon" title="扫描正常"><i></i></span>
             <span id="statusLine">正在检查本机 Session</span>
@@ -56,6 +60,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
             <span>收起气泡</span>
           </button>
+          <button type="button" role="menuitemcheckbox" id="menuToggleChatter" aria-checked="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8.5h9a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4H9l-4 3v-11Z"></path></svg>
+            <span>允许牛碎嘴<small>状态变化时提醒</small></span>
+          </button>
           <button type="button" role="menuitem" id="menuHideApp">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg>
             <span>隐藏桌宠<small>⌘⇧U 唤回</small></span>
@@ -69,10 +77,10 @@
         </div>
 
         <div class="summary-rail" id="summaryRail" aria-label="Session 汇总">
-          <span class="summary-item working"><i></i><b id="workingCount">0</b><em>工作</em></span>
-          <span class="summary-item waiting"><i></i><b id="waitingCount">0</b><em>等你</em></span>
-          <span class="summary-item idle"><i></i><b id="idleCount">0</b><em>闲置</em></span>
-          <span class="summary-item offline"><i></i><b id="offlineCount">0</b><em>离线</em></span>
+          <span class="summary-item working"><i></i><b id="workingCount">0</b><em>拉犁</em></span>
+          <span class="summary-item waiting"><i></i><b id="waitingCount">0</b><em>停犁</em></span>
+          <span class="summary-item idle"><i></i><b id="idleCount">0</b><em>吃草</em></span>
+          <span class="summary-item offline"><i></i><b id="offlineCount">0</b><em>回棚</em></span>
           <span class="last-scan" id="lastScan">等待首次扫描</span>
         </div>
 
@@ -80,7 +88,7 @@
           <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
             <span class="token-mark" aria-hidden="true">T</span>
             <span class="token-copy">
-              <span>今日 Token · 精确</span>
+              <span>今日 Token · 本机可核对</span>
               <strong id="todayTokens">—</strong>
             </span>
             <span class="token-sources" id="tokenSources">正在读取本机用量</span>
@@ -88,7 +96,7 @@
           <nav class="status-filters" id="statusFilters" aria-label="按状态筛选 Session"></nav>
           <nav class="runtime-filters" id="runtimeFilters" aria-label="按 Runtime 筛选 Session"></nav>
           <div class="list-heading">
-            <span id="sessionHeading">工作中会话</span>
+            <span id="sessionHeading">正在拉犁</span>
             <span id="sessionTotal">0 个</span>
           </div>
           <ul id="list" aria-live="polite">
@@ -108,8 +116,16 @@
         <div class="cow-motion" id="cowMotion">
           <canvas class="cow-layer is-active" id="cowA" width="420" height="420"></canvas>
           <canvas class="cow-layer" id="cowB" width="420" height="420"></canvas>
+          <div class="cow-face-fx" aria-hidden="true">
+            <i class="cow-fx-eye is-left"></i>
+            <i class="cow-fx-eye is-right"></i>
+            <i class="cow-fx-mouth"><b></b></i>
+          </div>
         </div>
         <div class="cow-caption" id="cowCaption" role="status">哞。</div>
+        <div class="moo-marathon" id="mooMarathon" role="status" aria-live="polite" hidden>
+          <i aria-hidden="true"></i><span>哞拉松</span><time id="mooMarathonTime">05:00</time>
+        </div>
         <span class="drag-hint" aria-hidden="true">拖我走 · 右键记事</span>
       </div>
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -169,6 +185,13 @@
             <span>Session 气泡 <output id="bubbleScaleValue">100%</output></span>
             <input id="bubbleScale" type="range" min="75" max="125" step="5" value="100" />
           </label>
+          <label class="preference-toggle">
+            <span>
+              <strong>播放牛叫声</strong>
+              <small>关闭后保留文字提醒和牛的动作。</small>
+            </span>
+            <input id="soundEnabled" type="checkbox" checked />
+          </label>
         </section>
         <div class="section-heading runtime-settings-heading">
           <div>
@@ -215,6 +238,7 @@
         </div>
       </form>
     </dialog>
+    <script src="moo.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

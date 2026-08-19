@@ -1,8 +1,8 @@
 const STATUS_TEXT = {
-  working: "工作中",
-  waiting: "等你",
-  idle: "闲置",
-  offline: "不在线",
+  working: "拉犁",
+  waiting: "停犁",
+  idle: "吃草",
+  offline: "回棚",
 };
 
 const COW_SKINS = [
@@ -11,19 +11,57 @@ const COW_SKINS = [
     name: "原版牛来",
     src: "../assets/niulai-neutral-animated-v1.png",
     expressions: {
+      turning: "../assets/niulai-turning-v1.png",
+      "speaking-half": "../assets/niulai-speaking-half-v1.png",
       speaking: "../assets/niulai-speaking-v1.png",
       attention: "../assets/niulai-attention-v1.png",
+      "attention-speaking-half": "../assets/niulai-attention-speaking-half-v1.png",
       "attention-speaking": "../assets/niulai-attention-speaking-v1.png",
       blink: "../assets/niulai-blink-v1.png",
     },
   },
-  { id: "skirt", name: "小裙子牛来", src: "../assets/niulai-skirt-v1.png" },
-  { id: "headband", name: "头箍牛来", src: "../assets/niulai-headband-v1.png" },
-  { id: "butt", name: "翘屁股牛来", src: "../assets/niulai-butt-v1.png" },
-  { id: "study", name: "认真学习的牛来", src: "../assets/niulai-study-v1.png" },
-  { id: "backpack", name: "背书包的牛来", src: "../assets/niulai-backpack-v1.png" },
-  { id: "dance", name: "跳舞的牛来", src: "../assets/niulai-dance-v1.png" },
-  { id: "football", name: "踢足球的牛来", src: "../assets/niulai-football-v1.png" },
+  {
+    id: "skirt",
+    name: "小裙子牛来",
+    src: "../assets/niulai-skirt-v1.png",
+    face: { eyes: [[39, 21], [50, 21]], mouth: [42, 31, 15] },
+  },
+  {
+    id: "headband",
+    name: "头箍牛来",
+    src: "../assets/niulai-headband-v1.png",
+    face: { eyes: [[39, 21], [50, 21]], mouth: [42, 31, 15] },
+  },
+  {
+    id: "butt",
+    name: "翘屁股牛来",
+    src: "../assets/niulai-butt-v1.png",
+    face: { eyes: [[28, 27], [40, 27]], mouth: [34, 37, 15] },
+  },
+  {
+    id: "study",
+    name: "认真学习的牛来",
+    src: "../assets/niulai-study-v1.png",
+    face: { eyes: [[38, 27], [49, 27]], mouth: [41, 38, 15] },
+  },
+  {
+    id: "backpack",
+    name: "背书包的牛来",
+    src: "../assets/niulai-backpack-v1.png",
+    face: { eyes: [[36, 21], [47, 21]], mouth: [39, 30, 15] },
+  },
+  {
+    id: "dance",
+    name: "跳舞的牛来",
+    src: "../assets/niulai-dance-v1.png",
+    face: { eyes: [[41, 21], [52, 21]], mouth: [46, 29, 15] },
+  },
+  {
+    id: "football",
+    name: "踢足球的牛来",
+    src: "../assets/niulai-football-v1.png",
+    face: { eyes: [[46, 24], [57, 24]], mouth: [50, 34, 15] },
+  },
   {
     id: "old-friend",
     name: "不是牛来的牛",
@@ -32,20 +70,25 @@ const COW_SKINS = [
       waiting: "../assets/cow-waiting.png",
       offline: "../assets/cow-offline.png",
     },
+    face: {
+      eyes: [[44.7, 24.2, 7.8, 8], [60.7, 24.6, 5.8, 7.5]],
+      mouth: [54, 41, 13],
+    },
   },
 ];
 
 const MOOD_COPY = {
-  working: (counts) => `${counts.working} 个 Session 正在工作`,
+  working: (counts) => `${counts.working} 头在拉犁`,
   waiting: (counts) =>
-    counts.waiting ? `${counts.waiting} 个 Session 在等你` : `${counts.idle} 个 Session 当前闲置`,
-  offline: () => "现在很安静",
+    counts.waiting ? `${counts.waiting} 头停犁等你` : `${counts.idle} 头在吃草`,
+  offline: () => "牛棚里很安静",
 };
 
 const PREVIEW_CONFIG = {
   pollMs: 5000,
   cowScale: 1,
   bubbleScale: 1,
+  soundEnabled: true,
   runtimes: {
     cursor: { enabled: true, label: "Cursor" },
     "claude-code": { enabled: true, label: "Claude Code" },
@@ -93,7 +136,7 @@ const PREVIEW_SNAPSHOT = {
       runtime: "codex",
       label: "Codex",
       status: "waiting",
-      statusText: "等你",
+      statusText: "停犁",
       statusReason: "Codex 已完成最近一轮",
       cwdName: "desktop-agent",
       cwd: "/Users/you/code/desktop-agent",
@@ -106,7 +149,7 @@ const PREVIEW_SNAPSHOT = {
       runtime: "grok",
       label: "Grok Build",
       status: "waiting",
-      statusText: "等你",
+      statusText: "停犁",
       statusReason: "Grok 已完成最近一轮",
       cwdName: "agent-lab",
       cwd: "/Users/you/code/agent-lab",
@@ -160,7 +203,9 @@ function previewApi() {
     },
     focusSession: async () => true,
     setIgnoreMouse: () => {},
-    moveWindow: () => {},
+    startWindowDrag: () => {},
+    moveWindowDrag: () => {},
+    endWindowDrag: () => {},
     onRequestScan: () => () => {},
     onMemoDue: () => () => {},
   };
@@ -170,10 +215,18 @@ const api = window.niulai || previewApi();
 const imageCache = new Map();
 const processedImageCache = new Map();
 let activeCanvas = "cowA";
+let currentFrameSource = "";
+let frameRequestId = 0;
 let mood = "";
 let currentSkinId = localStorage.getItem("niulai.cowSkin") || "original";
 let activeRuntimeFilter = localStorage.getItem("niulai.runtimeFilter") || "all";
-let activeStatusFilter = localStorage.getItem("niulai.statusFilter") || "working";
+const STATUS_FILTER_VERSION = "2";
+let activeStatusFilter =
+  localStorage.getItem("niulai.statusFilterVersion") === STATUS_FILTER_VERSION
+    ? localStorage.getItem("niulai.statusFilter") || "working"
+    : "working";
+localStorage.setItem("niulai.statusFilter", activeStatusFilter);
+localStorage.setItem("niulai.statusFilterVersion", STATUS_FILTER_VERSION);
 let config;
 let latestRows = [];
 let latestSnapshot = null;
@@ -183,12 +236,20 @@ let captionTimer;
 let speakingTimer;
 let blinkTimer;
 let expressionTimer;
+let attentionTimer;
+let stateChangeTimer;
+let stateChangeFrame;
 let toastTimer;
 let cowClickTimer;
+let mooMarathonTimer;
+let mooCountdownTimer;
+let mooMarathonEndsAt = 0;
+let cowClickBurst = [];
 let pointerDown = null;
 let suppressClick = false;
 let memoReminder = "0";
 let hasInitialSnapshot = false;
+let chatterEnabled = localStorage.getItem("niulai.chatter") !== "false";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -211,14 +272,14 @@ function imageFor(src) {
   return promise;
 }
 
-async function chromaDraw(src, canvas) {
+async function prepareCowFrame(src) {
   let processed = processedImageCache.get(src);
   if (!processed) {
     processed = (async () => {
       const image = await imageFor(src);
       const prepared = document.createElement("canvas");
-      prepared.width = canvas.width;
-      prepared.height = canvas.height;
+      prepared.width = 420;
+      prepared.height = 420;
       const preparedContext = prepared.getContext("2d", { willReadFrequently: true });
       preparedContext.drawImage(image, 0, 0, prepared.width, prepared.height);
       const imageData = preparedContext.getImageData(0, 0, prepared.width, prepared.height);
@@ -243,7 +304,10 @@ async function chromaDraw(src, canvas) {
     })();
     processedImageCache.set(src, processed);
   }
-  const prepared = await processed;
+  return processed;
+}
+
+function drawPreparedFrame(prepared, canvas) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(prepared, 0, 0, canvas.width, canvas.height);
@@ -258,14 +322,42 @@ function cowSource(skin, nextMood) {
   return skin.src[nextMood] || skin.src.waiting;
 }
 
+function applyFaceProfile(skin) {
+  const pet = document.getElementById("pet");
+  const stage = document.getElementById("cowStage");
+  const profile = skin.face;
+  pet.dataset.faceFx = profile ? "fallback" : "native";
+  if (!profile) return;
+  const [[leftX, leftY, leftWidth, leftHeight], [rightX, rightY, rightWidth, rightHeight]] =
+    profile.eyes;
+  const [mouthX, mouthY, mouthWidth] = profile.mouth;
+  stage.style.setProperty("--face-eye-left-x", `${leftX}%`);
+  stage.style.setProperty("--face-eye-left-y", `${leftY}%`);
+  stage.style.setProperty("--face-eye-right-x", `${rightX}%`);
+  stage.style.setProperty("--face-eye-right-y", `${rightY}%`);
+  stage.style.setProperty("--face-eye-left-width", leftWidth ? `${leftWidth}%` : "30px");
+  stage.style.setProperty("--face-eye-left-height", leftHeight ? `${leftHeight}%` : "18px");
+  stage.style.setProperty("--face-eye-right-width", rightWidth ? `${rightWidth}%` : "30px");
+  stage.style.setProperty("--face-eye-right-height", rightHeight ? `${rightHeight}%` : "18px");
+  stage.style.setProperty("--face-mouth-x", `${mouthX}%`);
+  stage.style.setProperty("--face-mouth-y", `${mouthY}%`);
+  stage.style.setProperty("--face-mouth-width", `${mouthWidth}%`);
+}
+
 async function swapCowFrame(src) {
+  const requestId = ++frameRequestId;
+  if (!src || src === currentFrameSource) return false;
+  const prepared = await prepareCowFrame(src);
+  if (requestId !== frameRequestId) return false;
   const nextCanvas = activeCanvas === "cowA" ? "cowB" : "cowA";
   const incoming = document.getElementById(nextCanvas);
   const outgoing = document.getElementById(activeCanvas);
-  await chromaDraw(src, incoming);
+  drawPreparedFrame(prepared, incoming);
   incoming.classList.add("is-active");
   outgoing.classList.remove("is-active");
   activeCanvas = nextCanvas;
+  currentFrameSource = src;
+  return true;
 }
 
 async function setCowExpression(expression = "base") {
@@ -282,7 +374,9 @@ async function setCow(nextMood, force = false) {
   if (!force && mood === nextMood) return;
   const previousMood = mood;
   mood = nextMood;
-  await swapCowFrame(cowSource(currentSkin(), mood));
+  const skin = currentSkin();
+  applyFaceProfile(skin);
+  await swapCowFrame(cowSource(skin, mood));
   const pet = document.getElementById("pet");
   pet.dataset.mood = mood;
   pet.dataset.skin = currentSkinId;
@@ -290,9 +384,11 @@ async function setCow(nextMood, force = false) {
 
   if (previousMood) {
     const stage = document.getElementById("cowStage");
+    window.clearTimeout(stateChangeTimer);
+    window.cancelAnimationFrame(stateChangeFrame);
     stage.classList.remove("is-state-changing");
-    requestAnimationFrame(() => stage.classList.add("is-state-changing"));
-    window.setTimeout(() => stage.classList.remove("is-state-changing"), 460);
+    stateChangeFrame = requestAnimationFrame(() => stage.classList.add("is-state-changing"));
+    stateChangeTimer = window.setTimeout(() => stage.classList.remove("is-state-changing"), 460);
   }
 }
 
@@ -316,21 +412,6 @@ async function rollCow() {
     button.classList.remove("is-rolling");
     stage.classList.remove("is-rolling");
   }, 600);
-}
-
-function runtimeGlyph(row) {
-  const explicit = {
-    cursor: "C",
-    "claude-code": "CL",
-    "claude-desktop": "CL",
-    codex: "CX",
-    grok: "GR",
-    gemini: "G",
-    opencode: "OC",
-    pi: "π",
-    copilot: "GH",
-  };
-  return explicit[row.runtime] || String(row.label || row.runtime || "?").slice(0, 2);
 }
 
 function runtimeQuality(id) {
@@ -360,7 +441,7 @@ function formatTokens(tokens) {
 
 function spokenText(message) {
   const text = String(message || "").trim();
-  return /^哞[，。～~、！？!?]/.test(text) ? text : `哞，${text}`;
+  return /^哞/.test(text) ? text : `哞，${text}`;
 }
 
 function stopSpeaking({ restore = true } = {}) {
@@ -368,8 +449,8 @@ function stopSpeaking({ restore = true } = {}) {
   window.clearTimeout(expressionTimer);
   const stage = document.getElementById("cowStage");
   stage?.classList.remove("is-speaking");
-  if (restore && stage && !stage.classList.contains("is-observing-session")) {
-    setCowExpression("base");
+  if (restore && stage) {
+    setCowExpression(stage.classList.contains("is-observing-session") ? "attention" : "base");
   }
   scheduleBlink();
 }
@@ -381,15 +462,16 @@ function startSpeaking(duration, attention = false) {
   window.clearTimeout(expressionTimer);
   window.clearTimeout(blinkTimer);
   stage.classList.add("is-speaking");
-  const closed = attention ? "attention" : "base";
-  const open = attention ? "attention-speaking" : "speaking";
-  let mouthOpen = true;
-  setCowExpression(open);
+  const frames = attention
+    ? ["attention-speaking-half", "attention-speaking", "attention-speaking-half", "attention"]
+    : ["speaking-half", "speaking", "speaking-half", "base"];
+  let frame = 0;
+  setCowExpression(frames[frame]);
   if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     speakingTimer = window.setInterval(() => {
-      mouthOpen = !mouthOpen;
-      setCowExpression(mouthOpen ? open : closed);
-    }, 260);
+      frame = (frame + 1) % frames.length;
+      setCowExpression(frames[frame]);
+    }, 135);
   }
   if (duration > 0) {
     expressionTimer = window.setTimeout(() => stopSpeaking(), duration);
@@ -418,7 +500,11 @@ function showCaption(message, duration = 1800, options = {}) {
   caption.classList.add("is-visible");
   caption.classList.toggle("is-attention", Boolean(options.attention));
   window.clearTimeout(captionTimer);
-  startSpeaking(duration, Boolean(options.attention));
+  if (options.speak !== false) {
+    const speechDuration =
+      options.speechDuration ?? Math.min(duration > 0 ? duration : 1100, 1800);
+    startSpeaking(speechDuration, Boolean(options.attention));
+  }
   if (duration > 0) {
     captionTimer = window.setTimeout(() => {
       caption.classList.remove("is-visible", "is-attention", "is-session-focus");
@@ -538,12 +624,23 @@ function renderTokenUsage(snapshot) {
   const usage = snapshot.tokenUsage || { tokens: 0, sources: [] };
   const total = document.getElementById("todayTokens");
   const sources = document.getElementById("tokenSources");
-  total.textContent = formatTokens(usage.tokens);
+  const hasPartial = usage.sources?.some(
+    (source) => source.tokens > 0 && source.confidence === "partial"
+  );
+  total.textContent = `${hasPartial ? "≥" : ""}${formatTokens(usage.tokens)}`;
   sources.textContent = usage.sources?.length
-    ? usage.sources.map((source) => `${source.label} ${formatTokens(source.tokens)}`).join(" · ")
+    ? usage.sources
+        .map((source) => {
+          if (!source.tokens && source.confidence === "estimated") {
+            return `${source.label} 旧日志≈${formatTokens(source.estimatedTokens)}（未计）`;
+          }
+          const exact = `${source.label} ${source.confidence === "partial" ? "≥" : ""}${formatTokens(source.tokens)}`;
+          return source.estimatedTokens ? `${exact} · 另有旧日志估算未计` : exact;
+        })
+        .join(" · ")
     : "Codex、Claude、Grok、Gemini 暂无今日记录";
   document.getElementById("tokenStrip").title =
-    "只读取可核对的本机 usage：Codex、Claude Code、Grok Build、Gemini CLI。Cursor 本机 Session 未暴露实际 usage，因此不估算。";
+    "总数只读取可核对的本机 usage：Codex、Claude Code、新版 Grok Build、Gemini CLI。旧版 Grok 上下文快照单独标为估算且不计入总数；Cursor 不估算。";
 }
 
 function renderRuntimeFilters(rows) {
@@ -581,10 +678,10 @@ function renderStatusFilters(rows) {
     return acc;
   }, {});
   const items = [
-    { id: "working", label: "工作中", count: counts.working || 0 },
-    { id: "waiting", label: "等你", count: counts.waiting || 0 },
-    { id: "idle", label: "闲置", count: counts.idle || 0 },
-    { id: "offline", label: "离线", count: counts.offline || 0 },
+    { id: "working", label: STATUS_TEXT.working, count: counts.working || 0 },
+    { id: "waiting", label: STATUS_TEXT.waiting, count: counts.waiting || 0 },
+    { id: "idle", label: STATUS_TEXT.idle, count: counts.idle || 0 },
+    { id: "offline", label: STATUS_TEXT.offline, count: counts.offline || 0 },
     { id: "all", label: "全部", count: rows.length },
   ];
   filters.innerHTML = items
@@ -609,17 +706,42 @@ function renderSessionRows(snapshot) {
     activeStatusFilter === "all"
       ? runtimeRows
       : runtimeRows.filter((row) => row.status === activeStatusFilter);
+  const headingCopy = {
+    working: "正在拉犁",
+    waiting: "停犁等你",
+    idle: "正在吃草",
+    offline: "已回棚",
+    all: "所有会话",
+  };
+  document.getElementById("sessionHeading").textContent =
+    headingCopy[activeStatusFilter] || "Session";
   document.getElementById("sessionTotal").textContent =
     activeRuntimeFilter === "all" && activeStatusFilter === "all"
       ? `${rows.length} 个`
       : `${rows.length} / ${snapshot.rows.length} 个`;
 
   if (!rows.length) {
-    list.innerHTML = `
+    const filtered = snapshot.rows.length > 0;
+    const runtimeSummary = enabledRuntimeSummary();
+    list.innerHTML = filtered
+      ? `
       <li class="empty-state">
         <div>
-          <strong>${snapshot.rows.length ? "当前筛选下没有 Session" : "暂时没发现 Session"}</strong>
-          <span>${snapshot.rows.length ? "默认只看工作中；可切到“全部”查看其他状态。" : "打开一个支持的 Runtime，牛来会在下一次巡视时看见它。"}</span>
+          <strong>当前筛选下没有 Session</strong>
+          <span>默认只看「拉犁」。上面还有其他状态，或点「全部」看完整巡视。</span>
+          <div class="empty-actions">
+            <button type="button" class="empty-action" data-empty-action="show-all">查看全部</button>
+          </div>
+        </div>
+      </li>`
+      : `
+      <li class="empty-state">
+        <div>
+          <strong>暂时没发现 Session</strong>
+          <span>默认只看「拉犁」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
+          <div class="empty-actions">
+            <button type="button" class="empty-action" data-empty-action="open-settings">打开设置</button>
+          </div>
         </div>
       </li>`;
     stopCowPointing();
@@ -643,7 +765,6 @@ function renderSessionRows(snapshot) {
             title="${escapeHtml(stateReason)}"
             aria-label="打开 ${escapeHtml(row.label)} ${escapeHtml(displayName)}，${escapeHtml(stateText)}">
           <span class="status-dot ${escapeHtml(row.status)}" title="${escapeHtml(stateReason)}"></span>
-          <span class="runtime-glyph" aria-hidden="true">${escapeHtml(runtimeGlyph(row))}</span>
           <span class="session-copy">
             <span class="session-title">
               <strong>${escapeHtml(displayName)}</strong>
@@ -670,6 +791,15 @@ function renderSessionRows(snapshot) {
       }
     });
   }
+}
+
+function enabledRuntimeSummary() {
+  const labels = Object.values(config?.runtimes || {})
+    .filter((item) => item && item.enabled !== false && item.label)
+    .map((item) => escapeHtml(item.label));
+  if (!labels.length) return "Cursor、Claude Code、Codex";
+  if (labels.length <= 5) return labels.join("、");
+  return `${labels.slice(0, 5).join("、")} 等`;
 }
 
 function renderList(snapshot) {
@@ -710,17 +840,30 @@ function pointCowAt(element) {
   const row = latestRows.find((item) => String(item.id) === String(element.dataset.id));
   if (row) {
     const caption = document.getElementById("cowCaption");
-    showCaption(`${row.label} · ${row.statusText || STATUS_TEXT[row.status] || row.status}`, 0, {
-      attention: true,
-    });
-    caption.classList.add("is-session-focus");
+    const observedId = String(row.id);
+    stage.dataset.observingId = observedId;
+    window.clearTimeout(attentionTimer);
+    setCowExpression("turning");
+    attentionTimer = window.setTimeout(() => {
+      if (stage.dataset.observingId !== observedId) return;
+      showCaption(`${row.label} · ${row.statusText || STATUS_TEXT[row.status] || row.status}`, 0, {
+        attention: true,
+        speechDuration: 900,
+      });
+      caption.classList.add("is-session-focus");
+    }, 150);
   }
 }
 
 function stopCowPointing() {
   const pet = document.getElementById("pet");
   pet?.classList.remove("is-observing-session");
-  document.getElementById("cowStage")?.classList.remove("is-observing-session");
+  const stage = document.getElementById("cowStage");
+  window.clearTimeout(attentionTimer);
+  if (stage) {
+    stage.classList.remove("is-observing-session");
+    delete stage.dataset.observingId;
+  }
   document.querySelector(".session-row.is-pointed-at")?.classList.remove("is-pointed-at");
   const caption = document.getElementById("cowCaption");
   caption?.classList.remove("is-session-focus", "is-visible");
@@ -732,7 +875,7 @@ function stopCowPointing() {
 }
 
 function announceStatusChanges(previousRows, nextRows) {
-  if (!hasInitialSnapshot) return;
+  if (!hasInitialSnapshot || !chatterEnabled) return;
   const previous = new Map(previousRows.map((row) => [String(row.id), row.status]));
   const priority = { working: 0, waiting: 1, idle: 2, offline: 3 };
   const changes = nextRows
@@ -742,16 +885,17 @@ function announceStatusChanges(previousRows, nextRows) {
   const row = changes[0];
   const name = row.cwdName || row.title || row.label;
   const copy = {
-    working: `${name} 开始干活了。`,
-    waiting: `${name} 做完这轮，在等你。`,
-    idle: `${name} 歇下来了。`,
-    offline: `${row.label} 下线了。`,
+    working: `${name} 套上犁了。`,
+    waiting: `${name} 停犁了，正等你。`,
+    idle: `${name} 去吃草了。`,
+    offline: `${row.label} 回棚了。`,
   };
-  const suffix = changes.length > 1 ? ` 还有 ${changes.length - 1} 条也变了。` : "";
+  const suffix = changes.length > 1 ? ` 另外 ${changes.length - 1} 条也有动静。` : "";
   showCaption(`${copy[row.status] || `${name} 状态变了。`}${suffix}`, 4200);
 }
 
 async function tick() {
+  if (pointerDown?.dragging) return;
   const beacon = document.getElementById("liveBeacon");
   beacon.classList.add("is-scanning");
   beacon.title = "正在扫描";
@@ -761,6 +905,7 @@ async function tick() {
     renderList(snapshot);
     await setCow(snapshot.mood);
     announceStatusChanges(previousRows, snapshot.rows);
+    maybeShowFirstRunHint(snapshot);
     hasInitialSnapshot = true;
     beacon.title = "扫描正常";
   } catch (error) {
@@ -791,7 +936,7 @@ function setPetMenuOpen(open) {
   }
 }
 
-function setBubbleCollapsed(collapsed) {
+function setBubbleCollapsed(collapsed, options = {}) {
   const bubble = document.getElementById("bubble");
   const toggle = document.getElementById("toggleBubble");
   bubble.classList.toggle("is-collapsed", collapsed);
@@ -799,7 +944,21 @@ function setBubbleCollapsed(collapsed) {
   localStorage.setItem("niulai.bubbleCollapsed", String(collapsed));
   syncMenuBubbleAction(collapsed);
   if (collapsed) stopCowPointing();
-  showCaption(collapsed ? "我先收好。" : "都在这里。", 1200);
+  if (!options.silent) {
+    showCaption(collapsed ? "我先收好。" : "都在这里。", 1200);
+  }
+}
+
+function maybeShowFirstRunHint(snapshot) {
+  if (localStorage.getItem("niulai.firstRunHint") === "1") return;
+  localStorage.setItem("niulai.firstRunHint", "1");
+  const hasWorking = (snapshot?.counts?.working || 0) > 0;
+  showCaption(
+    hasWorking
+      ? "牛来看着这些 Session。⌘⇧U 可隐藏。"
+      : "先打开一个 Runtime。点齿轮可开关扫描，⌘⇧U 可隐藏。",
+    4200
+  );
 }
 
 function toggleBubble() {
@@ -811,31 +970,167 @@ function petCow() {
   const stage = document.getElementById("cowStage");
   stage.classList.remove("is-petted");
   requestAnimationFrame(() => stage.classList.add("is-petted"));
-  showCaption(mood === "working" ? "忙着呢，也可以摸一下。" : "哞～", 1800);
+  showCaption(mood === "working" ? "拉着犁呢，也可以摸一下。" : "哞～", 1800);
+  playCowMoo(mood === "working" ? "short" : "medium");
   window.setTimeout(() => stage.classList.remove("is-petted"), 720);
+}
+
+const MOO_MARATHON_MS = 5 * 60 * 1000;
+const MOO_MARATHON_BEAT_MS = 5000;
+const MOO_MARATHON_LINES = [
+  "哞。",
+  "哞哞。",
+  "哞——",
+  "哞？",
+  "哞，还在哞。",
+  "哞，进度正常。",
+  "哞，没事，我练嗓子。",
+  "哞，这也是一种 Runtime。",
+];
+
+function syncChatterMenu() {
+  const button = document.getElementById("menuToggleChatter");
+  if (!button) return;
+  button.setAttribute("aria-checked", String(chatterEnabled));
+  const copy = button.querySelector("span");
+  if (copy) {
+    copy.innerHTML = chatterEnabled
+      ? "允许牛碎嘴<small>状态变化时提醒</small>"
+      : "让牛开口<small>当前只报重要提醒</small>";
+  }
+}
+
+function setChatterEnabled(enabled) {
+  chatterEnabled = Boolean(enabled);
+  localStorage.setItem("niulai.chatter", String(chatterEnabled));
+  syncChatterMenu();
+  if (!chatterEnabled && mooMarathonEndsAt) stopMooMarathon(false);
+  showCaption(chatterEnabled ? "我可以碎嘴了。" : "行，我少说两句。", 1700);
+}
+
+function marathonRemainingText() {
+  const seconds = Math.max(0, Math.ceil((mooMarathonEndsAt - Date.now()) / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function syncMooMarathon() {
+  const badge = document.getElementById("mooMarathon");
+  if (!badge) return;
+  const running = mooMarathonEndsAt > Date.now();
+  badge.hidden = !running;
+  document.getElementById("cowStage")?.classList.toggle("is-moo-marathon", running);
+  if (running) document.getElementById("mooMarathonTime").textContent = marathonRemainingText();
+}
+
+function mooMarathonBeat() {
+  if (!mooMarathonEndsAt) return;
+  if (Date.now() >= mooMarathonEndsAt) {
+    stopMooMarathon(true);
+    return;
+  }
+  syncMooMarathon();
+  const line = MOO_MARATHON_LINES[Math.floor(Math.random() * MOO_MARATHON_LINES.length)];
+  showCaption(line, 2600, { speechDuration: 1050 });
+  playCowMoo(mooKindForLine(line));
+}
+
+function stopMooMarathon(announce = true) {
+  window.clearInterval(mooMarathonTimer);
+  window.clearInterval(mooCountdownTimer);
+  mooMarathonEndsAt = 0;
+  syncMooMarathon();
+  if (announce) {
+    showCaption("哞，哞拉松结束，嗓子还在。", 2300);
+    playCowMoo("medium");
+  }
+}
+
+function toggleMooMarathon() {
+  if (mooMarathonEndsAt > Date.now()) {
+    stopMooMarathon(false);
+    showCaption("哞，紧急闭嘴成功。", 2000);
+    playCowMoo("short");
+    return;
+  }
+  if (!chatterEnabled) {
+    setChatterEnabled(true);
+  }
+  mooMarathonEndsAt = Date.now() + MOO_MARATHON_MS;
+  syncMooMarathon();
+  showCaption("哞，五分钟哞拉松，开跑。再连点五下就闭嘴。", 4200, {
+    speechDuration: 1500,
+  });
+  playCowMoo("long");
+  mooMarathonTimer = window.setInterval(mooMarathonBeat, MOO_MARATHON_BEAT_MS);
+  mooCountdownTimer = window.setInterval(syncMooMarathon, 1000);
+}
+
+function registerCowClick() {
+  const now = Date.now();
+  cowClickBurst = cowClickBurst.filter((time) => now - time < 1600);
+  cowClickBurst.push(now);
+  if (cowClickBurst.length >= 5) {
+    cowClickBurst = [];
+    window.clearTimeout(cowClickTimer);
+    toggleMooMarathon();
+    return true;
+  }
+  return false;
+}
+
+function cowBoundsInWindow(stage) {
+  const rect = stage.getBoundingClientRect();
+  return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
 }
 
 function bindCowInteraction() {
   const stage = document.getElementById("cowStage");
   const pet = document.getElementById("pet");
+  let dragFrame = 0;
+  let pendingCursor = null;
+
+  const cancelQueuedDrag = () => {
+    pendingCursor = null;
+    if (dragFrame) {
+      cancelAnimationFrame(dragFrame);
+      dragFrame = 0;
+    }
+  };
+
+  const queueDragMove = (screenX, screenY) => {
+    pendingCursor = { screenX, screenY };
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = 0;
+      const point = pendingCursor;
+      pendingCursor = null;
+      if (!pointerDown?.dragging || !point) return;
+      api.moveWindowDrag(point.screenX, point.screenY);
+    });
+  };
+
+  const beginWindowDrag = (event) => {
+    pointerDown.dragging = true;
+    stage.classList.add("is-dragging");
+    api.setIgnoreMouse(false);
+    api.startWindowDrag({
+      originX: pointerDown.screenX,
+      originY: pointerDown.screenY,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      cowBounds: cowBoundsInWindow(stage),
+    });
+  };
 
   stage.addEventListener("pointermove", (event) => {
     if (pointerDown) {
-      const deltaX = event.screenX - pointerDown.screenX;
-      const deltaY = event.screenY - pointerDown.screenY;
+      if (event.pointerId !== pointerDown.pointerId) return;
       const distance = Math.hypot(
         event.clientX - pointerDown.clientX,
         event.clientY - pointerDown.clientY
       );
-      if (distance > 4) {
-        pointerDown.dragging = true;
-        stage.classList.add("is-dragging");
-      }
-      if (pointerDown.dragging && (deltaX || deltaY)) {
-        api.moveWindow(deltaX, deltaY);
-        pointerDown.screenX = event.screenX;
-        pointerDown.screenY = event.screenY;
-      }
+      if (!pointerDown.dragging && distance > 4) beginWindowDrag(event);
+      if (pointerDown.dragging) queueDragMove(event.screenX, event.screenY);
       return;
     }
 
@@ -855,6 +1150,7 @@ function bindCowInteraction() {
 
   stage.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    armCowAudio();
     stage.setPointerCapture(event.pointerId);
     pointerDown = {
       pointerId: event.pointerId,
@@ -867,10 +1163,23 @@ function bindCowInteraction() {
   });
 
   const finishPointer = (event) => {
-    if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
-    suppressClick = pointerDown.dragging;
+    if (!pointerDown) return;
+    if (event?.pointerId != null && pointerDown.pointerId !== event.pointerId) return;
+    const pointerId = pointerDown.pointerId;
+    const wasDragging = pointerDown.dragging;
+    suppressClick = wasDragging;
     pointerDown = null;
+    cancelQueuedDrag();
     stage.classList.remove("is-dragging");
+    if (wasDragging) api.endWindowDrag();
+    if (stage.hasPointerCapture?.(pointerId)) {
+      try {
+        stage.releasePointerCapture(pointerId);
+      } catch {
+        /* already released */
+      }
+    }
+    syncMousePassthrough();
     window.setTimeout(() => {
       suppressClick = false;
     }, 0);
@@ -878,9 +1187,12 @@ function bindCowInteraction() {
 
   stage.addEventListener("pointerup", finishPointer);
   stage.addEventListener("pointercancel", finishPointer);
+  stage.addEventListener("lostpointercapture", finishPointer);
+  window.addEventListener("blur", finishPointer);
 
   stage.addEventListener("click", () => {
     if (suppressClick) return;
+    if (registerCowClick()) return;
     window.clearTimeout(cowClickTimer);
     cowClickTimer = window.setTimeout(toggleBubble, 230);
   });
@@ -904,6 +1216,7 @@ function bindCowInteraction() {
     }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+      if (registerCowClick()) return;
       if (event.shiftKey) petCow();
       else toggleBubble();
     }
@@ -979,6 +1292,7 @@ function fillSettings(nextConfig) {
     )
     .join("");
   syncScaleControls(nextConfig);
+  document.getElementById("soundEnabled").checked = nextConfig.soundEnabled !== false;
   draftCustom = structuredClone(nextConfig.custom || []);
   renderCustomRuntimes();
   hideCustomEditor();
@@ -1065,9 +1379,11 @@ async function saveSettings() {
   }
   next.cowScale = Number(document.getElementById("cowScale").value) / 100;
   next.bubbleScale = Number(document.getElementById("bubbleScale").value) / 100;
+  next.soundEnabled = document.getElementById("soundEnabled").checked;
   next.custom = structuredClone(draftCustom);
   setSettingsMessage("正在保存…");
   config = await api.saveConfig(next);
+  setCowSoundEnabled(config.soundEnabled !== false);
   applyDisplayScale(config);
   closeSettings();
   showToast("巡视范围已更新");
@@ -1116,6 +1432,29 @@ function bindSettings() {
   });
 }
 
+let passthroughLeaveTimer = 0;
+
+function cancelPassthroughLeave() {
+  window.clearTimeout(passthroughLeaveTimer);
+  passthroughLeaveTimer = 0;
+}
+
+function isOverInteractiveSurface() {
+  return ["bubble", "cowStage", "quickMemo", "settings"].some((id) => {
+    const element = document.getElementById(id);
+    return Boolean(element?.matches(":hover"));
+  });
+}
+
+function syncMousePassthrough() {
+  cancelPassthroughLeave();
+  if (pointerDown || document.getElementById("settings")?.open) {
+    api.setIgnoreMouse(false);
+    return;
+  }
+  api.setIgnoreMouse(!isOverInteractiveSurface());
+}
+
 function armMousePassthrough() {
   const interactive = [
     document.getElementById("bubble"),
@@ -1123,15 +1462,15 @@ function armMousePassthrough() {
     document.getElementById("quickMemo"),
     document.getElementById("settings"),
   ];
-  let leaveTimer;
   const enter = () => {
-    window.clearTimeout(leaveTimer);
+    cancelPassthroughLeave();
     api.setIgnoreMouse(false);
   };
   const leave = () => {
-    window.clearTimeout(leaveTimer);
-    leaveTimer = window.setTimeout(() => {
-      if (!document.getElementById("settings").open) api.setIgnoreMouse(true);
+    cancelPassthroughLeave();
+    passthroughLeaveTimer = window.setTimeout(() => {
+      if (pointerDown || document.getElementById("settings").open) return;
+      api.setIgnoreMouse(true);
     }, 80);
   };
   for (const element of interactive) {
@@ -1144,7 +1483,7 @@ function armMousePassthrough() {
 function scheduleScanning() {
   window.clearInterval(scanTimer);
   scanTimer = window.setInterval(() => {
-    if (!document.hidden) tick();
+    if (!document.hidden && !pointerDown?.dragging) tick();
   }, config.pollMs || 2500);
 }
 
@@ -1162,6 +1501,11 @@ function bindTopControls() {
   document.getElementById("menuToggleBubble").addEventListener("click", (event) => {
     event.stopPropagation();
     toggleBubble();
+    setPetMenuOpen(false);
+  });
+  document.getElementById("menuToggleChatter").addEventListener("click", (event) => {
+    event.stopPropagation();
+    setChatterEnabled(!chatterEnabled);
     setPetMenuOpen(false);
   });
   document.getElementById("menuHideApp").addEventListener("click", async (event) => {
@@ -1194,6 +1538,27 @@ function bindTopControls() {
     renderStatusFilters(latestSnapshot.rows);
     renderSessionRows(latestSnapshot);
   });
+  document.getElementById("list").addEventListener("click", (event) => {
+    const action = event.target.closest("[data-empty-action]");
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (action.dataset.emptyAction === "show-all") {
+      activeStatusFilter = "all";
+      activeRuntimeFilter = "all";
+      localStorage.setItem("niulai.statusFilter", activeStatusFilter);
+      localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
+      if (latestSnapshot) {
+        renderRuntimeFilters(latestSnapshot.rows);
+        renderStatusFilters(latestSnapshot.rows);
+        renderSessionRows(latestSnapshot);
+      }
+      return;
+    }
+    if (action.dataset.emptyAction === "open-settings") {
+      document.getElementById("gear").click();
+    }
+  });
   document.addEventListener("pointerdown", (event) => {
     if (!event.target.closest("#petMenu, #petMenuButton")) setPetMenuOpen(false);
   });
@@ -1205,7 +1570,8 @@ function bindTopControls() {
 window.addEventListener("DOMContentLoaded", async () => {
   if (!COW_SKINS.some((skin) => skin.id === currentSkinId)) currentSkinId = "original";
   const collapsed = localStorage.getItem("niulai.bubbleCollapsed") === "true";
-  setBubbleCollapsed(collapsed);
+  setBubbleCollapsed(collapsed, { silent: true });
+  syncChatterMenu();
   bindCowInteraction();
   bindMemo();
   bindSettings();
@@ -1222,9 +1588,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       ...Object.values(skin.expressions || {}),
     ])
   );
-  await Promise.all([...cowSources].map(imageFor));
+  await Promise.all([...cowSources].map(prepareCowFrame));
   await setCow("waiting", true);
   config = await api.getConfig();
+  setCowSoundEnabled(config.soundEnabled !== false);
   applyDisplayScale(config);
   fillSettings(config);
   await tick();

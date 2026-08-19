@@ -15,12 +15,17 @@ const { loadConfig, saveConfig } = require("./config");
 const { scan } = require("./scan");
 const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
+const { windowPositionForCursor } = require("./window-position");
 
 let win;
 let tray;
 let config;
 let memoStore;
 let memoTimer;
+let windowDrag = null;
+let ignoreMouseRequested = true;
+let lastSnapshot = null;
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
@@ -88,16 +93,72 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      autoplayPolicy: "no-user-gesture-required",
     },
   });
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.webContents.setAudioMuted(false);
   win.once("ready-to-show", () => win && win.showInactive());
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 }
 
 function snapshot() {
-  return scan(config);
+  lastSnapshot = scan(config);
+  return lastSnapshot;
+}
+
+function displayWorkAreaNear(x, y) {
+  const point = { x: Math.round(x), y: Math.round(y) };
+  const display = screen.getDisplayNearestPoint(point);
+  return (display || screen.getPrimaryDisplay()).workArea;
+}
+
+function applyIgnoreMouse(ignore) {
+  if (!win) return;
+  win.setIgnoreMouseEvents(Boolean(ignore) && !windowDrag, { forward: true });
+}
+
+function moveDraggedWindow(screenX, screenY) {
+  if (!win || !windowDrag) return;
+  const next = windowPositionForCursor(
+    screenX,
+    screenY,
+    windowDrag.offsetX,
+    windowDrag.offsetY,
+    windowDrag.cowBounds,
+    displayWorkAreaNear(screenX, screenY)
+  );
+  if (!next) return;
+  if (windowDrag.lastX === next.x && windowDrag.lastY === next.y) return;
+  windowDrag.lastX = next.x;
+  windowDrag.lastY = next.y;
+  win.setPosition(next.x, next.y, false);
+}
+
+function beginWindowDrag(payload) {
+  if (!win || !payload) return;
+  const originX = Number(payload.originX);
+  const originY = Number(payload.originY);
+  if (!Number.isFinite(originX) || !Number.isFinite(originY)) return;
+  const [wx, wy] = win.getPosition();
+  const cowBounds = payload.cowBounds && typeof payload.cowBounds === "object" ? payload.cowBounds : null;
+  windowDrag = {
+    offsetX: originX - wx,
+    offsetY: originY - wy,
+    cowBounds,
+    lastX: wx,
+    lastY: wy,
+  };
+  applyIgnoreMouse(false);
+  const screenX = Number(payload.screenX);
+  const screenY = Number(payload.screenY);
+  if (Number.isFinite(screenX) && Number.isFinite(screenY)) moveDraggedWindow(screenX, screenY);
+}
+
+function endWindowDrag() {
+  windowDrag = null;
+  applyIgnoreMouse(ignoreMouseRequested);
 }
 
 app.whenReady().then(() => {
@@ -127,7 +188,7 @@ app.whenReady().then(() => {
     console.warn("tray unavailable", err);
   }
 
-  ipcMain.handle("scan", () => snapshot());
+  ipcMain.handle("scan", () => (windowDrag && lastSnapshot ? lastSnapshot : snapshot()));
   ipcMain.handle("get-config", () => config);
   ipcMain.handle("save-config", (_e, next) => {
     config = saveConfig(app.getPath("userData"), next);
@@ -157,14 +218,15 @@ app.whenReady().then(() => {
     return focusSession(session, runtimeCfg);
   });
   ipcMain.on("set-ignore-mouse", (_e, ignore) => {
-    if (!win) return;
-    win.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
+    ignoreMouseRequested = Boolean(ignore);
+    applyIgnoreMouse(ignoreMouseRequested);
   });
-  ipcMain.on("move-window", (_e, deltaX, deltaY) => {
-    if (!win || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
-    const [x, y] = win.getPosition();
-    win.setPosition(x + Math.round(deltaX), y + Math.round(deltaY), false);
+  ipcMain.on("start-window-drag", (_e, payload) => beginWindowDrag(payload));
+  ipcMain.on("move-window-drag", (_e, payload) => {
+    if (!payload) return;
+    moveDraggedWindow(Number(payload.screenX), Number(payload.screenY));
   });
+  ipcMain.on("end-window-drag", endWindowDrag);
 });
 
 app.on("window-all-closed", () => app.quit());

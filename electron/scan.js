@@ -192,11 +192,11 @@ function activity(status, label, reason, activityAt, confidence = "medium") {
 }
 
 function classify({ mtime, online, now, workingWindowMs }) {
-  if (!online) return activity("offline", "未运行", "没有发现对应 Runtime 进程", mtime, "high");
+  if (!online) return activity("offline", "回棚", "没有发现对应 Runtime 进程", mtime, "high");
   if (now - mtime <= workingWindowMs) {
-    return activity("working", "活动中", "Session 数据刚刚更新", mtime, "medium");
+    return activity("working", "拉犁", "Session 数据刚刚更新", mtime, "medium");
   }
-  return activity("idle", "闲置", "Runtime 在运行，但此 Session 没有近期活动", mtime, "medium");
+  return activity("idle", "吃草", "Runtime 在运行，但此 Session 没有近期活动", mtime, "medium");
 }
 
 function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
@@ -206,7 +206,7 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
   const recentSessionMs = 30 * 60 * 1000;
   const pendingTurnMs = 6 * 60 * 60 * 1000;
   if (age > pendingTurnMs) {
-    return activity("idle", "闲置", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
+    return activity("idle", "吃草", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
   }
   const records = readJsonlTail(file);
   if (!records.length) return classify({ mtime, online, now, workingWindowMs });
@@ -222,10 +222,10 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
       }
     });
     if (lifecycle === "task_started" && age <= pendingTurnMs) {
-      return activity("working", "执行中", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
+      return activity("working", "拉犁", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
     }
     if ((lifecycle === "task_complete" || lifecycle === "turn_aborted") && age <= recentSessionMs) {
-      return activity("waiting", "等你", "Codex 已完成最近一轮", mtime, "high");
+      return activity("waiting", "停犁", "Codex 已完成最近一轮", mtime, "high");
     }
     const afterLifecycle = records.slice(lifecycleIndex + 1);
     if (
@@ -238,7 +238,7 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
           )
       )
     ) {
-      return activity("working", "调用工具", "Codex 最近事件是工具调用", mtime, "high");
+      return activity("working", "出力", "Codex 最近事件是工具调用", mtime, "high");
     }
   }
 
@@ -253,16 +253,16 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
 
   if (runtime === "cursor") {
     if (last.type === "turn_ended" && age <= recentSessionMs) {
-      return activity("waiting", "等你", "Cursor 已完成最近一轮", mtime, "high");
+      return activity("waiting", "停犁", "Cursor 已完成最近一轮", mtime, "high");
     }
     if (age <= pendingTurnMs && (hasToolUse || hasToolResult)) {
-      return activity("working", hasToolUse ? "调用工具" : "处理结果", "Cursor turn 尚未结束", mtime, "high");
+      return activity("working", hasToolUse ? "出力" : "拉犁", "Cursor turn 尚未结束", mtime, "high");
     }
     if (age <= pendingTurnMs && role === "user") {
-      return activity("working", "正在响应", "收到用户消息，尚未记录 turn 结束", mtime, "high");
+      return activity("working", "拉犁", "收到用户消息，尚未记录 turn 结束", mtime, "high");
     }
     if (age <= recentSessionMs && role === "assistant" && hasText && !hasToolUse) {
-      return activity("waiting", "等你", "Cursor 最近一轮已给出回复", mtime, "medium");
+      return activity("waiting", "停犁", "Cursor 最近一轮已给出回复", mtime, "medium");
     }
   }
 
@@ -270,27 +270,27 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
     if (age <= pendingTurnMs && (hasToolUse || hasToolResult || hasThinking)) {
       return activity(
         "working",
-        hasToolUse ? "调用工具" : hasThinking ? "思考中" : "处理结果",
+        hasToolUse ? "出力" : hasThinking ? "低头" : "拉犁",
         "Claude 最近事件仍在一个执行链中",
         mtime,
         "high"
       );
     }
     if (age <= pendingTurnMs && last.type === "user") {
-      return activity("working", "正在响应", "Claude 已收到新消息", mtime, "medium");
+      return activity("working", "拉犁", "Claude 已收到新消息", mtime, "medium");
     }
     if (age <= recentSessionMs && (last.type === "last-prompt" || (last.type === "assistant" && hasText))) {
-      return activity("waiting", "等你", "Claude 最近一轮已完成", mtime, "medium");
+      return activity("waiting", "停犁", "Claude 最近一轮已完成", mtime, "medium");
     }
   }
 
   if (age <= workingWindowMs) {
-    return activity("working", "活动中", `${runtime} Session 数据刚刚更新`, mtime, "medium");
+    return activity("working", "拉犁", `${runtime} Session 数据刚刚更新`, mtime, "medium");
   }
   if (age <= recentSessionMs) {
-    return activity("waiting", "等你", "最近使用过，当前没有执行事件", mtime, "low");
+    return activity("waiting", "停犁", "最近使用过，当前没有执行事件", mtime, "low");
   }
-  return activity("idle", "闲置", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
+  return activity("idle", "吃草", "Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
 }
 
 function session({
@@ -617,13 +617,13 @@ function detectGrok({ now, workingWindowMs, procs, cfg }) {
       activeEntry && livePids.has(Number(activeEntry.pid)) && now - mtime <= 6 * 60 * 60 * 1000;
     let state;
     if (!online) {
-      state = activity("offline", "未运行", "没有发现 Grok Build 或 Grok Bot 进程", mtime, "high");
+      state = activity("offline", "回棚", "没有发现 Grok Build 或 Grok Bot 进程", mtime, "high");
     } else if (isRegisteredActive) {
-      state = activity("working", "执行中", "Grok active_sessions 记录该 Session 正在运行", mtime, "high");
+      state = activity("working", "拉犁", "Grok active_sessions 记录该 Session 正在运行", mtime, "high");
     } else if (now - mtime <= 30 * 60 * 1000) {
-      state = activity("waiting", "等你", "Grok Session 最近更新，当前没有活动执行记录", mtime, "medium");
+      state = activity("waiting", "停犁", "Grok Session 最近更新，当前没有活动执行记录", mtime, "medium");
     } else {
-      state = activity("idle", "闲置", "Grok Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
+      state = activity("idle", "吃草", "Grok Runtime 在运行，但此 Session 已停止活动", mtime, "medium");
     }
     return session({
       runtime: "grok",
@@ -795,8 +795,8 @@ function detectCustom(item, { now, workingWindowMs, procs }) {
     const activityHint = processNames.length
       ? undefined
       : now - mtime <= workingWindowMs
-        ? activity("working", "活动中", "未配置进程名，仅根据 Session 文件更新判断", mtime, "low")
-        : activity("idle", "闲置", "未配置进程名，无法确认 Runtime 是否仍在运行", mtime, "low");
+        ? activity("working", "拉犁", "未配置进程名，仅根据 Session 文件更新判断", mtime, "low")
+        : activity("idle", "吃草", "未配置进程名，无法确认 Runtime 是否仍在运行", mtime, "low");
     return session({
       runtime: item.id,
       label: item.label || item.id,
@@ -939,6 +939,7 @@ function scan(config) {
 
   let tokenUsage = {
     tokens: 0,
+    estimatedTokens: 0,
     sources: [],
     sessions: {},
     supportedRuntimes: ["codex", "claude-code", "grok", "gemini"],
@@ -956,6 +957,10 @@ function scan(config) {
       ...collected,
       sources,
       tokens: sources.reduce((sum, source) => sum + source.tokens, 0),
+      estimatedTokens: sources.reduce(
+        (sum, source) => sum + Number(source.estimatedTokens || 0),
+        0
+      ),
     };
     rows = rows.map((row) => ({
       ...row,

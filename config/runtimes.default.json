@@ -1,9 +1,10 @@
 {
-  "configVersion": 3,
+  "configVersion": 4,
   "pollMs": 2500,
   "globalShortcut": "CommandOrControl+Shift+U",
   "cowScale": 1,
   "bubbleScale": 1,
+  "soundEnabled": true,
   "workingWindowMs": 90000,
   "maxOfflineAgeMs": 259200000,
   "maxSessions": 32,

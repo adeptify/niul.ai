@@ -46,6 +46,7 @@ function loadConfig(userDataDir) {
       "maxSessionsPerRuntime",
       "cowScale",
       "bubbleScale",
+      "soundEnabled",
     ]) {
       if (key in defaults) merged[key] = defaults[key];
     }

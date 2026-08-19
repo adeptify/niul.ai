@@ -101,6 +101,24 @@ textarea:focus-visible,
   -webkit-app-region: drag;
 }
 
+.brand-lockup {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--bone);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.brand-lockup img {
+  width: 23px;
+  height: 23px;
+  object-fit: contain;
+}
+
 .status-overview {
   display: flex;
   min-width: 0;
@@ -262,6 +280,10 @@ textarea:focus-visible,
 .pet-menu button:hover,
 .pet-menu button:focus-visible {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.pet-menu #menuToggleChatter[aria-checked="true"] svg {
+  color: var(--tag-bright);
 }
 
 .pet-menu button.danger {
@@ -537,7 +559,7 @@ textarea:focus-visible,
 }
 
 #list {
-  max-height: 210px;
+  max-height: 228px;
   margin: 0;
   padding: 0 8px 9px;
   overflow-y: auto;
@@ -547,13 +569,13 @@ textarea:focus-visible,
 .session-row {
   position: relative;
   display: grid;
-  grid-template-columns: 10px 34px minmax(0, 1fr) auto;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
-  min-height: 54px;
-  margin: 0 0 3px;
-  padding: 6px 8px;
-  border-radius: 11px;
+  gap: 8px;
+  min-height: 43px;
+  margin: 0 0 2px;
+  padding: 4px 8px;
+  border-radius: 9px;
   color: var(--bone);
   cursor: pointer;
   transition:
@@ -614,24 +636,10 @@ textarea:focus-visible,
   animation: idleBreath 3.4s ease-in-out infinite;
 }
 
-.runtime-glyph {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 9px;
-  background: #373229;
-  color: var(--tag-bright);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
-}
-
 .session-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 1px;
 }
 
 .session-title {
@@ -701,10 +709,33 @@ textarea:focus-visible,
 
 .empty-state span {
   display: block;
-  max-width: 27ch;
+  max-width: 36ch;
   margin-top: 5px;
   font-size: 10px;
   line-height: 1.5;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.empty-action {
+  min-height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: #3a342c;
+  color: #fff4e3;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.empty-action:hover {
+  background: #4a4338;
 }
 
 .skeleton {
@@ -776,13 +807,114 @@ textarea:focus-visible,
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition:
-    opacity 240ms ease,
-    filter 300ms ease;
 }
 
 .cow-layer.is-active {
   opacity: 1;
+}
+
+.cow-face-fx {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cow-fx-eye,
+.cow-fx-mouth {
+  position: absolute;
+  display: block;
+  opacity: 0;
+}
+
+.cow-fx-eye {
+  width: 30px;
+  height: 18px;
+  border: 1.5px solid #4a372d;
+  border-radius: 54% 54% 48% 48%;
+  background: #eee7d8;
+  box-shadow: inset 0 -2px 0 rgba(77, 55, 45, 0.2);
+  transform: translate(-50%, -50%) scale(0.94, 0.82);
+  transition: opacity 90ms ease;
+}
+
+.cow-fx-eye::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #30241e;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.cow-fx-eye.is-left {
+  top: var(--face-eye-left-y);
+  left: var(--face-eye-left-x);
+  width: var(--face-eye-left-width);
+  height: var(--face-eye-left-height);
+}
+
+.cow-fx-eye.is-right {
+  top: var(--face-eye-right-y);
+  left: var(--face-eye-right-x);
+  width: var(--face-eye-right-width);
+  height: var(--face-eye-right-height);
+}
+
+.cow-fx-mouth {
+  top: var(--face-mouth-y);
+  left: var(--face-mouth-x);
+  width: var(--face-mouth-width);
+  aspect-ratio: 2.45;
+  overflow: hidden;
+  border: 3px solid #866c8d;
+  border-radius: 50%;
+  background: #26171c;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(38, 23, 28, 0.3);
+  transform: translate(-50%, -50%) scaleY(0.22);
+  transform-origin: 50% 50%;
+}
+
+.cow-fx-mouth b {
+  position: absolute;
+  right: 20%;
+  bottom: -8%;
+  width: 48%;
+  height: 38%;
+  border-radius: 50%;
+  background: #b56e78;
+}
+
+#pet[data-skin="old-friend"] .cow-fx-mouth {
+  border-width: 2px;
+  border-color: #755239;
+  background: #2b211c;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(42, 31, 24, 0.26);
+}
+
+#pet[data-skin="old-friend"] .cow-fx-mouth b {
+  background: #a76462;
+}
+
+#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye {
+  opacity: 1;
+  animation: cowFallbackEyeLook 420ms var(--ease-out) both;
+}
+
+#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye::after {
+  animation: cowFallbackPupilLook 420ms var(--ease-out) both;
+}
+
+#pet[data-face-fx="fallback"] .cow-stage.is-speaking .cow-fx-mouth {
+  opacity: 1;
+  animation: cowFallbackMouth 270ms ease-in-out infinite;
 }
 
 #pet[data-mood="waiting"] .cow-motion {
@@ -797,41 +929,65 @@ textarea:focus-visible,
   animation: cowOffline 5.2s ease-in-out infinite;
 }
 
-#pet[data-skin="study"] .cow-stage:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session) .cow-motion {
+#pet[data-skin="study"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
   animation: cowStudy 5.2s ease-in-out infinite;
 }
 
-#pet[data-skin="backpack"] .cow-stage:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session) .cow-motion {
+#pet[data-skin="backpack"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
   animation: cowBackpack 4.8s ease-in-out infinite;
 }
 
-#pet[data-skin="dance"] .cow-stage:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session) .cow-motion {
+#pet[data-skin="dance"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
   animation: cowDance 3.2s ease-in-out infinite;
 }
 
-#pet[data-skin="football"] .cow-stage:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session) .cow-motion {
+#pet[data-skin="football"] .cow-stage:where(:not(.is-state-changing):not(.is-petted):not(.is-rolling):not(.is-dragging):not(.is-observing-session):not(.is-speaking)) .cow-motion {
   animation: cowFootball 4.4s ease-in-out infinite;
 }
 
-.cow-stage.is-state-changing .cow-motion {
+#pet .cow-stage.is-state-changing .cow-motion {
   animation: cowNotice 420ms var(--ease-out);
 }
 
-.cow-stage.is-petted .cow-motion {
+#pet .cow-stage.is-petted .cow-motion {
   animation: cowPet 680ms var(--ease-out);
 }
 
-.cow-stage.is-rolling .cow-motion {
+#pet .cow-stage.is-rolling .cow-motion {
   animation: cowRoll 560ms var(--ease-out);
 }
 
-#pet[data-skin="original"] .cow-motion,
-#pet.is-observing-session .cow-stage .cow-motion,
-.cow-stage.is-speaking .cow-motion {
+#pet.is-observing-session .cow-stage .cow-motion {
   animation: none;
 }
 
-.cow-stage.is-dragging .cow-motion {
+#pet .cow-stage.is-speaking .cow-motion {
+  animation: cowTalkBody 540ms ease-in-out infinite;
+}
+
+#pet .cow-stage.is-speaking.is-state-changing .cow-motion {
+  animation: cowNotice 420ms var(--ease-out);
+}
+
+#pet .cow-stage.is-speaking.is-petted .cow-motion {
+  animation: cowPet 680ms var(--ease-out);
+}
+
+#pet .cow-stage.is-speaking.is-rolling .cow-motion {
+  animation: cowRoll 560ms var(--ease-out);
+}
+
+#pet[data-face-fx="fallback"].is-observing-session .cow-stage:not(.is-speaking) .cow-motion {
+  transform-origin: 50% 72%;
+  animation: cowFallbackLook 420ms var(--ease-out) both;
+}
+
+#pet[data-face-fx="fallback"].is-observing-session .cow-stage.is-speaking .cow-motion {
+  transform-origin: 50% 72%;
+  animation: cowFallbackLookTalk 540ms ease-in-out infinite;
+}
+
+#pet .cow-stage.is-dragging .cow-motion {
   animation: none;
   transform: translate3d(var(--look-x), 3px, 0) rotate(-1.5deg) scale(0.98);
 }
@@ -862,14 +1018,14 @@ textarea:focus-visible,
   top: 22px;
   right: -68px;
   width: max-content;
-  max-width: 170px;
-  padding: 9px 11px 9px 13px;
+  max-width: 190px;
+  padding: 10px 12px 10px 14px;
   border: 2px solid #382c1b;
   border-radius: 13px 16px 12px 7px;
   background: #f0d99a;
   box-shadow: 4px 5px 0 #382c1b, 0 12px 24px rgba(34, 25, 12, 0.2);
   color: #2b2114;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 650;
   line-height: 1.45;
   opacity: 0;
@@ -918,6 +1074,48 @@ textarea:focus-visible,
 
 .cow-stage.is-speaking .cow-caption {
   animation: speechCard 520ms steps(2, end) infinite;
+}
+
+.moo-marathon {
+  position: absolute;
+  z-index: 4;
+  bottom: 47px;
+  left: 10px;
+  display: grid;
+  grid-template-columns: 7px auto;
+  gap: 2px 6px;
+  min-width: 74px;
+  padding: 6px 8px;
+  border: 2px solid #382c1b;
+  border-radius: 7px 10px 6px 9px;
+  background: #d7a630;
+  box-shadow: 3px 3px 0 #382c1b;
+  color: #2b2114;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  transform: rotate(-2deg);
+}
+
+.moo-marathon[hidden] {
+  display: none;
+}
+
+.moo-marathon i {
+  grid-row: 1 / 3;
+  width: 7px;
+  height: 7px;
+  align-self: center;
+  border-radius: 50%;
+  background: #382c1b;
+  animation: marathonBlink 1s steps(1, end) infinite;
+}
+
+.moo-marathon time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .drag-hint {
@@ -1152,7 +1350,7 @@ textarea:focus-visible,
 }
 
 #settings::backdrop {
-  background: rgba(17, 14, 10, 0.42);
+  background: transparent;
 }
 
 #settings[open] {
@@ -1221,6 +1419,42 @@ textarea:focus-visible,
   color: #827768;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
+}
+
+.preference-toggle {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 9px;
+  border-top: 1px solid #ddd3c5;
+  color: #4a4339;
+  cursor: pointer;
+}
+
+.preference-toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.preference-toggle strong {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.preference-toggle small {
+  color: #827768;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.preference-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #a97813;
 }
 
 .scale-control input[type="range"] {
@@ -1612,6 +1846,74 @@ input::placeholder {
   }
   50% {
     transform: translateY(-1px) rotate(0.4deg);
+  }
+}
+
+@keyframes cowTalkBody {
+  0%,
+  100% {
+    transform: translate3d(var(--look-x), var(--look-y), 0) rotate(-0.2deg);
+  }
+  50% {
+    transform: translate3d(var(--look-x), calc(var(--look-y) - 1px), 0) rotate(0.25deg);
+  }
+}
+
+@keyframes cowFallbackEyeLook {
+  from {
+    transform: translate(-50%, -50%) scale(0.92, 0.72);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(0.98, 0.86);
+  }
+}
+
+@keyframes cowFallbackPupilLook {
+  from {
+    transform: translate(-50%, -42%);
+  }
+  to {
+    transform: translate(-50%, -88%);
+  }
+}
+
+@keyframes cowFallbackMouth {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scaleY(0.25);
+  }
+  48% {
+    transform: translate(-50%, -50%) scaleY(1);
+  }
+}
+
+@keyframes cowFallbackLook {
+  from {
+    transform: translate3d(var(--look-x), var(--look-y), 0) rotate(0);
+  }
+  to {
+    transform: translate3d(var(--look-x), calc(var(--look-y) - 4px), 0) rotate(-1.4deg);
+  }
+}
+
+@keyframes cowFallbackLookTalk {
+  0%,
+  100% {
+    transform: translate3d(var(--look-x), calc(var(--look-y) - 4px), 0) rotate(-1.4deg);
+  }
+  50% {
+    transform: translate3d(var(--look-x), calc(var(--look-y) - 6px), 0) rotate(-0.7deg);
+  }
+}
+
+@keyframes marathonBlink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0.35;
   }
 }
 

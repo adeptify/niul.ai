@@ -4,6 +4,7 @@ const path = require("path");
 
 const CACHE_MS = 30000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_FILES = 20000;
 let cached = null;
 
 function exists(file) {
@@ -23,7 +24,7 @@ function stat(file) {
 }
 
 function walkFiles(root, predicate, acc = [], depth = 0) {
-  if (!exists(root) || depth > 8 || acc.length >= 5000) return acc;
+  if (!exists(root) || depth > 10 || acc.length >= MAX_FILES) return acc;
   let entries;
   try {
     entries = fs.readdirSync(root, { withFileTypes: true });
@@ -31,6 +32,7 @@ function walkFiles(root, predicate, acc = [], depth = 0) {
     return acc;
   }
   for (const entry of entries) {
+    if (acc.length >= MAX_FILES) break;
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) walkFiles(full, predicate, acc, depth + 1);
     else if (predicate(full, entry.name)) acc.push(full);
@@ -38,14 +40,46 @@ function walkFiles(root, predicate, acc = [], depth = 0) {
   return acc;
 }
 
+function filesFromRoots(roots, predicate) {
+  const files = [];
+  const seen = new Set();
+  for (const root of roots.filter(Boolean)) {
+    for (const file of walkFiles(root, predicate)) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      files.push(file);
+      if (files.length >= MAX_FILES) return files;
+    }
+  }
+  return files;
+}
+
+function filesTouchedToday(roots, predicate, dayStart) {
+  const discovered = filesFromRoots(roots, predicate);
+  const files = discovered.filter((file) => {
+    const metadata = stat(file);
+    return (
+      metadata &&
+      (metadata.mtimeMs >= dayStart ||
+        metadata.ctimeMs >= dayStart ||
+        metadata.birthtimeMs >= dayStart)
+    );
+  });
+  return {
+    files,
+    discoveredFiles: discovered.length,
+    limitHit: discovered.length >= MAX_FILES,
+  };
+}
+
 function readRecentLines(file, marker) {
+  let handle;
   try {
     const metadata = fs.statSync(file);
     const start = Math.max(0, metadata.size - MAX_FILE_BYTES);
-    const handle = fs.openSync(file, "r");
+    handle = fs.openSync(file, "r");
     const buffer = Buffer.alloc(metadata.size - start);
     fs.readSync(handle, buffer, 0, buffer.length, start);
-    fs.closeSync(handle);
     let text = buffer.toString("utf8");
     if (start > 0) {
       const firstBreak = text.indexOf("\n");
@@ -57,7 +91,15 @@ function readRecentLines(file, marker) {
       metadata,
     };
   } catch {
-    return { lines: [], truncated: false, metadata: null };
+    return { lines: [], truncated: false, metadata: null, failed: true };
+  } finally {
+    if (handle !== undefined) {
+      try {
+        fs.closeSync(handle);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
@@ -66,12 +108,16 @@ function number(value) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
-function usageTotal(usage) {
-  if (!usage || typeof usage !== "object") return 0;
+function usageParts(usage) {
+  if (!usage || typeof usage !== "object") return { input: 0, output: 0, total: 0 };
   const input = number(usage.input_tokens ?? usage.inputTokens);
   const output = number(usage.output_tokens ?? usage.outputTokens);
   const explicit = number(usage.total_tokens ?? usage.totalTokens);
-  return explicit || input + output;
+  return { input, output, total: explicit || input + output };
+}
+
+function usageTotal(usage) {
+  return usageParts(usage).total;
 }
 
 function timestampMs(value) {
@@ -91,79 +137,134 @@ function localDayStart(now) {
   return date.getTime();
 }
 
-function codexTokens(root, dayStart, sessions) {
+function localDayEnd(now) {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 1);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function inDay(timestamp, dayStart, dayEnd) {
+  return Number.isFinite(timestamp) && timestamp >= dayStart && timestamp < dayEnd;
+}
+
+function advanceHighWater(highWater, current) {
+  highWater.input = Math.max(highWater.input, current.input);
+  highWater.output = Math.max(highWater.output, current.output);
+  highWater.total = Math.max(highWater.total, current.total);
+}
+
+function highWaterDelta(highWater, current) {
+  let delta;
+  if (current.input || current.output) {
+    delta =
+      Math.max(0, current.input - highWater.input) +
+      Math.max(0, current.output - highWater.output);
+  } else {
+    delta = Math.max(0, current.total - highWater.total);
+  }
+  advanceHighWater(highWater, current);
+  return delta;
+}
+
+function addSessionTokens(sessions, key, tokens) {
+  if (tokens > 0) sessions[key] = (sessions[key] || 0) + tokens;
+}
+
+function codexTokens(roots, dayStart, dayEnd, sessions) {
   const result = { id: "codex", label: "Codex", tokens: 0, files: 0, confidence: "high" };
-  const files = walkFiles(root, (file) => file.endsWith(".jsonl")).filter((file) => {
-    const metadata = stat(file);
-    return metadata && metadata.mtimeMs >= dayStart;
-  });
+  const discovered = filesTouchedToday(roots, (file) => file.endsWith(".jsonl"), dayStart);
+  const files = discovered.files;
+  const seenEvents = new Set();
+  if (discovered.limitHit) result.confidence = "partial";
 
   for (const file of files) {
-    const { lines, truncated, metadata } = readRecentLines(file, '"token_count"');
-    let previous = null;
+    const { lines, truncated, metadata, failed } = readRecentLines(file, '"token_count"');
+    if (failed || truncated) result.confidence = "partial";
+    const highWater = { input: 0, output: 0, total: 0 };
+    let baselineKnown = Boolean(
+      metadata && metadata.birthtimeMs >= dayStart && metadata.birthtimeMs < dayEnd
+    );
     let today = 0;
-    let sawBaseline = !truncated && metadata && metadata.birthtimeMs >= dayStart;
-    const seenSnapshots = new Set();
+
     for (const line of lines) {
       let record;
       try {
         record = JSON.parse(line);
       } catch {
+        result.confidence = "partial";
         continue;
       }
       if (record.type !== "event_msg" || record.payload?.type !== "token_count") continue;
       const timestamp = timestampMs(record.timestamp);
-      if (!Number.isFinite(timestamp)) continue;
-      const info = record.payload.info || {};
-      const cumulative = usageTotal(info.total_token_usage);
-      const last = usageTotal(info.last_token_usage);
-      const signature = JSON.stringify({
-        total: info.total_token_usage || null,
-        last: info.last_token_usage || null,
-      });
-      if (seenSnapshots.has(signature)) continue;
-      seenSnapshots.add(signature);
-      if (timestamp < dayStart) {
-        if (cumulative) previous = cumulative;
-        sawBaseline = true;
+      if (!Number.isFinite(timestamp)) {
+        result.confidence = "partial";
         continue;
       }
-      if (!cumulative) continue;
-      let delta;
-      if (last) {
-        // Current Codex logs expose the exact request usage. Prefer it over
-        // cumulative subtraction because independent rate-limit lanes can
-        // advance out of order (the same approach used by CC-Switch).
-        delta = last;
-      } else if (previous === null) {
-        delta = sawBaseline ? cumulative : last;
-      } else {
-        delta = cumulative >= previous ? cumulative - previous : last || cumulative;
+      if (timestamp >= dayEnd) continue;
+
+      const info = record.payload.info || {};
+      const cumulative = usageParts(info.total_token_usage);
+      const last = usageParts(info.last_token_usage);
+      const signature = `${timestamp}|${JSON.stringify(info.total_token_usage || null)}|${JSON.stringify(
+        info.last_token_usage || null
+      )}`;
+      const replayed = seenEvents.has(signature);
+      seenEvents.add(signature);
+
+      if (timestamp < dayStart) {
+        advanceHighWater(highWater, cumulative);
+        baselineKnown = true;
+        continue;
       }
-      today += Math.max(0, delta || 0);
-      previous = cumulative;
+      if (replayed) {
+        advanceHighWater(highWater, cumulative);
+        continue;
+      }
+      if (last.total) {
+        today += last.total;
+        advanceHighWater(highWater, cumulative);
+        continue;
+      }
+      if (!cumulative.total) continue;
+      if (!baselineKnown) {
+        advanceHighWater(highWater, cumulative);
+        baselineKnown = true;
+        result.confidence = "partial";
+        continue;
+      }
+      today += highWaterDelta(highWater, cumulative);
     }
+
     if (today > 0) {
       const id = path.basename(file, ".jsonl");
-      sessions[`codex:${id}`] = today;
+      addSessionTokens(sessions, `codex:${id}`, today);
       result.tokens += today;
       result.files += 1;
     }
-    if (truncated && !sawBaseline) result.confidence = "partial";
   }
+  result.scannedFiles = files.length;
+  result.discoveredFiles = discovered.discoveredFiles;
   return result;
 }
 
-function claudeTokens(root, dayStart, sessions) {
-  const result = { id: "claude-code", label: "Claude Code", tokens: 0, files: 0, confidence: "high" };
-  const files = walkFiles(root, (file) => file.endsWith(".jsonl")).filter((file) => {
-    const metadata = stat(file);
-    return metadata && metadata.mtimeMs >= dayStart;
-  });
+function claudeTokens(roots, dayStart, dayEnd, sessions) {
+  const result = {
+    id: "claude-code",
+    label: "Claude Code",
+    tokens: 0,
+    files: 0,
+    confidence: "high",
+  };
+  const discovered = filesTouchedToday(roots, (file) => file.endsWith(".jsonl"), dayStart);
+  const files = discovered.files;
+  const responses = new Map();
+  if (discovered.limitHit) result.confidence = "partial";
 
   for (const file of files) {
-    const { lines, truncated } = readRecentLines(file, '"usage"');
-    const responses = new Map();
+    const { lines, truncated, failed } = readRecentLines(file, '"usage"');
+    if (failed || truncated) result.confidence = "partial";
+    const sessionId = path.basename(file, ".jsonl");
     let lineNumber = 0;
     for (const line of lines) {
       lineNumber += 1;
@@ -171,11 +272,17 @@ function claudeTokens(root, dayStart, sessions) {
       try {
         record = JSON.parse(line);
       } catch {
+        result.confidence = "partial";
         continue;
       }
       if (record.type !== "assistant" || !record.message?.usage) continue;
       const timestamp = timestampMs(record.timestamp);
-      if (!Number.isFinite(timestamp) || timestamp < dayStart) continue;
+      if (!Number.isFinite(timestamp)) {
+        result.confidence = "partial";
+        continue;
+      }
+      if (!inDay(timestamp, dayStart, dayEnd)) continue;
+
       const usage = record.message.usage;
       const tokens =
         number(usage.input_tokens) +
@@ -187,36 +294,51 @@ function claudeTokens(root, dayStart, sessions) {
         record.message.id ||
         record.requestId ||
         record.request_id ||
-        `${record.sessionId || path.basename(file)}:${record.timestamp}:${record.message.model || "unknown"}:${lineNumber}`;
+        `${record.sessionId || sessionId}:${record.timestamp}:${record.message.model || "unknown"}:${lineNumber}`;
       const existing = responses.get(identity);
       const final = Boolean(record.message.stop_reason);
       if (!existing || (final && !existing.final) || tokens > existing.tokens) {
-        responses.set(identity, { tokens, final });
+        responses.set(identity, { tokens, final, sessionId, file });
       }
     }
-    const today = [...responses.values()].reduce((sum, entry) => sum + entry.tokens, 0);
-    if (today > 0) {
-      const id = path.basename(file, ".jsonl");
-      sessions[`claude-code:${id}`] = today;
-      result.tokens += today;
-      result.files += 1;
-    }
-    if (truncated) result.confidence = "partial";
   }
+
+  const contributingFiles = new Set();
+  for (const entry of responses.values()) {
+    result.tokens += entry.tokens;
+    addSessionTokens(sessions, `claude-code:${entry.sessionId}`, entry.tokens);
+    contributingFiles.add(entry.file);
+  }
+  result.files = contributingFiles.size;
+  result.scannedFiles = files.length;
+  result.discoveredFiles = discovered.discoveredFiles;
   return result;
 }
 
-function grokTokens(root, dayStart, sessions) {
-  const result = { id: "grok", label: "Grok Build", tokens: 0, files: 0, confidence: "high" };
-  const files = walkFiles(root, (_file, name) => name === "updates.jsonl").filter((file) => {
-    const metadata = stat(file);
-    return metadata && metadata.mtimeMs >= dayStart;
-  });
+function grokTokens(roots, dayStart, dayEnd, sessions) {
+  const result = {
+    id: "grok",
+    label: "Grok Build",
+    tokens: 0,
+    estimatedTokens: 0,
+    files: 0,
+    estimatedFiles: 0,
+    confidence: "high",
+  };
+  const discovered = filesTouchedToday(
+    roots,
+    (_file, name) => name === "updates.jsonl",
+    dayStart
+  );
+  const files = discovered.files;
+  const exactTurns = new Map();
+  const legacyTurns = new Map();
+  if (discovered.limitHit) result.confidence = "partial";
 
   for (const file of files) {
-    const { lines, truncated } = readRecentLines(file);
-    const completedTurns = new Map();
-    const legacyTurns = new Map();
+    const { lines, truncated, failed } = readRecentLines(file);
+    if (failed || truncated) result.confidence = "partial";
+    const directorySessionId = path.basename(path.dirname(file));
     let lineNumber = 0;
     for (const line of lines) {
       lineNumber += 1;
@@ -224,6 +346,7 @@ function grokTokens(root, dayStart, sessions) {
       try {
         record = JSON.parse(line);
       } catch {
+        result.confidence = "partial";
         continue;
       }
       const update = record.params?.update;
@@ -232,49 +355,89 @@ function grokTokens(root, dayStart, sessions) {
       if (
         usage &&
         (!update.sessionUpdate || update.sessionUpdate === "turn_completed") &&
-        Number.isFinite(timestamp) &&
-        timestamp >= dayStart
+        inDay(timestamp, dayStart, dayEnd)
       ) {
+        const sessionId =
+          record.params?.sessionId || record.sessionId || update.sessionId || directorySessionId;
+        const promptId =
+          update.prompt_id ||
+          update.promptId ||
+          record.params?.prompt_id ||
+          record.params?.promptId ||
+          record.timestamp ||
+          `line-${lineNumber}`;
         const modelUsage = usage.modelUsage;
-        const tokens =
-          modelUsage && typeof modelUsage === "object"
-            ? Object.values(modelUsage).reduce((sum, counters) => sum + usageTotal(counters), 0)
-            : usageTotal(usage);
-        const identity =
-          update.prompt_id || update.promptId || `${record.timestamp || "unknown"}:${lineNumber}`;
-        if (tokens) completedTurns.set(identity, tokens);
+        if (modelUsage && typeof modelUsage === "object") {
+          for (const [model, counters] of Object.entries(modelUsage)) {
+            const tokens = usageTotal(counters);
+            if (!tokens) continue;
+            const key = `${sessionId}:${promptId}:${model}`;
+            const existing = exactTurns.get(key);
+            if (!existing || tokens > existing.tokens) {
+              exactTurns.set(key, { tokens, sessionId, file });
+            }
+          }
+        } else {
+          const tokens = usageTotal(usage);
+          if (tokens) {
+            const key = `${sessionId}:${promptId}:unknown`;
+            const existing = exactTurns.get(key);
+            if (!existing || tokens > existing.tokens) {
+              exactTurns.set(key, { tokens, sessionId, file });
+            }
+          }
+        }
+      } else if (usage && !Number.isFinite(timestamp)) {
+        result.confidence = "partial";
       }
 
       const meta = record.params?._meta;
       const turnStart = number(meta?.turnStartMs);
       const legacyTokens = number(meta?.totalTokens);
-      if (turnStart && turnStart >= dayStart && legacyTokens) {
-        legacyTurns.set(turnStart, Math.max(legacyTokens, legacyTurns.get(turnStart) || 0));
+      if (turnStart && inDay(turnStart, dayStart, dayEnd) && legacyTokens) {
+        const sessionId = record.params?.sessionId || record.sessionId || directorySessionId;
+        const key = `${sessionId}:${turnStart}`;
+        const existing = legacyTurns.get(key);
+        if (!existing || legacyTokens > existing.tokens) {
+          legacyTurns.set(key, { tokens: legacyTokens, file });
+        }
       }
     }
-    // Newer Grok Build writes exact per-turn completion usage. The old _meta
-    // snapshots describe the same turn, so only use them as a compatibility
-    // fallback when no completion usage exists.
-    const turns = completedTurns.size ? completedTurns : legacyTurns;
-    const today = [...turns.values()].reduce((sum, tokens) => sum + tokens, 0);
-    if (today > 0) {
-      const id = path.basename(path.dirname(file));
-      sessions[`grok:${id}`] = today;
-      result.tokens += today;
-      result.files += 1;
-    }
-    if (truncated) result.confidence = "partial";
   }
+
+  const exactFiles = new Set();
+  for (const entry of exactTurns.values()) {
+    result.tokens += entry.tokens;
+    addSessionTokens(sessions, `grok:${entry.sessionId}`, entry.tokens);
+    exactFiles.add(entry.file);
+  }
+  const estimatedFiles = new Set();
+  for (const entry of legacyTurns.values()) {
+    result.estimatedTokens += entry.tokens;
+    estimatedFiles.add(entry.file);
+  }
+  result.files = exactFiles.size;
+  result.estimatedFiles = estimatedFiles.size;
+  result.scannedFiles = files.length;
+  result.discoveredFiles = discovered.discoveredFiles;
+  result.hasEstimated = result.estimatedTokens > 0;
+  if (!result.tokens && result.estimatedTokens) result.confidence = "estimated";
   return result;
 }
 
-function geminiTokens(root, dayStart, sessions) {
+function geminiTokens(roots, dayStart, dayEnd, sessions) {
   const result = { id: "gemini", label: "Gemini CLI", tokens: 0, files: 0, confidence: "high" };
-  const files = walkFiles(root, (_file, name) => name.startsWith("session-") && name.endsWith(".json"))
-    .filter((file) => {
-      const metadata = stat(file);
-      return metadata && metadata.mtimeMs >= dayStart && file.includes(`${path.sep}chats${path.sep}`);
-    });
+  const discovered = filesTouchedToday(
+    roots,
+    (file, name) =>
+      name.startsWith("session-") &&
+      name.endsWith(".json") &&
+      file.includes(`${path.sep}chats${path.sep}`),
+    dayStart
+  );
+  const files = discovered.files;
+  const seenMessages = new Set();
+  if (discovered.limitHit) result.confidence = "partial";
 
   for (const file of files) {
     let value;
@@ -285,15 +448,21 @@ function geminiTokens(root, dayStart, sessions) {
       continue;
     }
     const messages = Array.isArray(value.messages) ? value.messages : [];
-    const seen = new Set();
+    const projectHash = path.basename(path.dirname(path.dirname(file)));
+    const sessionName = path.basename(file);
+    const sessionId = value.sessionId || `${projectHash}:${sessionName}`;
     let today = 0;
     for (const message of messages) {
       if (message.type !== "gemini" || !message.tokens) continue;
       const timestamp = timestampMs(message.timestamp);
-      if (!Number.isFinite(timestamp) || timestamp < dayStart) continue;
-      const identity = message.id || `${message.timestamp}:${message.model || "unknown"}`;
-      if (seen.has(identity)) continue;
-      seen.add(identity);
+      if (!Number.isFinite(timestamp)) {
+        result.confidence = "partial";
+        continue;
+      }
+      if (!inDay(timestamp, dayStart, dayEnd)) continue;
+      const identity = `${sessionId}:${message.id || `${message.timestamp}:${message.model || "unknown"}`}`;
+      if (seenMessages.has(identity)) continue;
+      seenMessages.add(identity);
       const tokens =
         number(message.tokens.total) ||
         number(message.tokens.input) +
@@ -302,41 +471,79 @@ function geminiTokens(root, dayStart, sessions) {
       today += tokens;
     }
     if (today > 0) {
-      const hash = path.basename(path.dirname(path.dirname(file)));
-      const name = path.basename(file);
-      sessions[`gemini:${hash}:${name}`] = today;
+      addSessionTokens(sessions, `gemini:${projectHash}:${sessionName}`, today);
       result.tokens += today;
       result.files += 1;
     }
   }
+  result.scannedFiles = files.length;
+  result.discoveredFiles = discovered.discoveredFiles;
   return result;
 }
 
 function collectTokenUsage(now = Date.now(), options = {}) {
   const dayStart = localDayStart(now);
-  const useDefaultRoots =
-    !options.codexRoot && !options.claudeRoot && !options.grokRoot && !options.geminiRoot;
+  const dayEnd = localDayEnd(now);
+  const rootOptions = [
+    "codexHome",
+    "codexRoot",
+    "codexArchiveRoot",
+    "claudeHome",
+    "claudeRoot",
+    "grokHome",
+    "grokRoot",
+    "grokArchiveRoot",
+    "geminiHome",
+    "geminiRoot",
+  ];
+  const useDefaultRoots = rootOptions.every((key) => !options[key]);
   if (useDefaultRoots && cached && cached.dayStart === dayStart && now - cached.collectedAt < CACHE_MS) {
     return cached.snapshot;
   }
 
   const home = os.homedir();
+  const codexHome = options.codexHome || process.env.CODEX_HOME || path.join(home, ".codex");
+  const claudeHome =
+    options.claudeHome ||
+    process.env.CLAUDE_CONFIG_DIR ||
+    process.env.CLAUDE_HOME ||
+    path.join(home, ".claude");
+  const grokHome = options.grokHome || process.env.GROK_HOME || path.join(home, ".grok");
+  const geminiHome =
+    options.geminiHome ||
+    process.env.GEMINI_CLI_HOME ||
+    process.env.GEMINI_DIR ||
+    path.join(home, ".gemini");
+
+  const codexRoots = options.codexRoot
+    ? [options.codexRoot, options.codexArchiveRoot]
+    : [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")];
+  const claudeRoots = [options.claudeRoot || path.join(claudeHome, "projects")];
+  const grokRoots = options.grokRoot
+    ? [options.grokRoot, options.grokArchiveRoot]
+    : [path.join(grokHome, "sessions"), path.join(grokHome, "archived_sessions")];
+  const geminiRoots = [options.geminiRoot || path.join(geminiHome, "tmp")];
+
   const sessions = {};
   const sources = [
-    codexTokens(options.codexRoot || path.join(home, ".codex", "sessions"), dayStart, sessions),
-    claudeTokens(options.claudeRoot || path.join(home, ".claude", "projects"), dayStart, sessions),
-    grokTokens(options.grokRoot || path.join(home, ".grok", "sessions"), dayStart, sessions),
-    geminiTokens(options.geminiRoot || path.join(home, ".gemini", "tmp"), dayStart, sessions),
-  ].filter((source) => source.files > 0 || source.tokens > 0);
+    codexTokens(codexRoots, dayStart, dayEnd, sessions),
+    claudeTokens(claudeRoots, dayStart, dayEnd, sessions),
+    grokTokens(grokRoots, dayStart, dayEnd, sessions),
+    geminiTokens(geminiRoots, dayStart, dayEnd, sessions),
+  ].filter(
+    (source) => source.files > 0 || source.tokens > 0 || Number(source.estimatedTokens || 0) > 0
+  );
   const snapshot = {
     dayStart,
+    dayEnd,
     tokens: sources.reduce((sum, source) => sum + source.tokens, 0),
+    estimatedTokens: sources.reduce((sum, source) => sum + Number(source.estimatedTokens || 0), 0),
     sources,
     sessions,
     supportedRuntimes: ["codex", "claude-code", "grok", "gemini"],
     unsupportedReasons: {
-      cursor: "Cursor 本机 Session 暂未暴露实际 usage；不做估算",
-      "claude-desktop": "Claude Desktop 本机记录未提供可核对的 usage",
+      cursor: "Cursor 本机 Session 未暴露完整实际 usage；不按文本或稀疏私有字段估算",
+      "claude-desktop": "Claude Desktop 本机记录未提供可核对的完整 usage",
     },
     collectedAt: now,
   };
@@ -344,4 +551,4 @@ function collectTokenUsage(now = Date.now(), options = {}) {
   return snapshot;
 }
 
-module.exports = { collectTokenUsage, localDayStart };
+module.exports = { collectTokenUsage, localDayStart, localDayEnd };

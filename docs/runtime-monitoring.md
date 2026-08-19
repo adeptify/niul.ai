@@ -27,13 +27,15 @@ Poll every 2.5s. Take one process snapshot, then inspect each store. Cursor, Cla
 
 ### 今日 Token / Today's tokens
 
-统计口径参考 [TokenStep](https://github.com/Backtthefuture/TokenStep) 与 [CC-Switch](https://github.com/farion1231/cc-switch) 的 Session usage importer：只读取本机日志里明确的 usage 元数据，不按 prompt、代码或回复字数估算。结果缓存 30 秒，避免 2.5 秒 Session 轮询反复扫描大日志。
+统计口径参考 [TokenStep](https://github.com/Backtthefuture/TokenStep) 与 [CC-Switch](https://github.com/farion1231/cc-switch) 的 Session usage importer：只读取本机日志里明确的 usage 元数据，不按 prompt、代码或回复字数估算。结果缓存 30 秒，避免 2.5 秒 Session 轮询反复扫描大日志。所有事件按本地 `[今日 00:00, 明日 00:00)` 归属；`mtime` / `ctime` 只用于筛出今天实际改动过、需要重读的候选文件，不参与 Token 的日期归属。
 
-- **Codex**：读取 `token_count`；有 `last_token_usage` 时优先按单次请求精确入账并去除重复快照，旧日志才对 `total_token_usage` 做累计差分。这样不会被交错的 rate-limit counter lane 误导。
-- **Claude Code**：读取 assistant `message.usage`，按 `message.id` 去重，优先保留带 `stop_reason` 的最终块，再合计 input、cache creation、cache read 与 output。
-- **Grok Build**：优先读取 `turn_completed.usage.modelUsage` 的逐轮明确值；旧版本才回退到 `_meta.turnStartMs` / `_meta.totalTokens` 的每轮最大值，两种格式不重复相加。
+- **Codex**：同时读取 `$CODEX_HOME/sessions` 与 `archived_sessions`。`token_count.last_token_usage` 作为单次请求精确值；旧日志缺少它时，对 `total_token_usage` 的 input / output 分量做 high-water 增量。活动、归档与 fork/resume 重放的同时间戳同 payload 事件跨文件只计一次。
+- **Claude Code**：读取 `$CLAUDE_CONFIG_DIR/projects/**/*.jsonl` 的 assistant `message.usage`，在整个收集周期内按 `message.id` 跨文件去重，优先保留带 `stop_reason` 的最终块，再合计 input、cache creation、cache read 与 output。
+- **Grok Build**：同时读取 `$GROK_HOME/sessions` 与 `archived_sessions`，只把 `turn_completed.usage.modelUsage` 的逐轮明确值计入总数，并按 session + prompt + model 去重。旧 `_meta.turnStartMs` / `_meta.totalTokens` 是会随 compaction 回退的上下文快照，只单列为“旧日志估算”，**不进入今日总数**。
 - **Gemini CLI**：读取 `session-*.json` 中每条 `type: gemini` 消息的 `tokens.total`，缺少 total 时合计 input、output 与 thoughts；cached 是 input 子集，不重复加入。
 - **Cursor**：当前本机 Session 只公开模型上下文上限，没有实际请求 usage；CC-Switch 当前源码也没有 Cursor Session importer。因此 Cursor 不进入总量，界面明确显示“Token 未公开”，不会伪造估算值。
+
+读取被 64 MiB 尾部限制截断、缺少日初 baseline 或遇到无效时间戳时，来源标记为 `partial`，界面用 `≥` 表示可核对下界；`estimated` 永远不混入精确总数。
 
 进程匹配必须收紧，避免误伤 / Process matching must be strict:
 
@@ -58,10 +60,10 @@ Poll every 2.5s. Take one process snapshot, then inspect each store. Cursor, Cla
 | Runtime | Session 主路径 / Primary store | 环境变量 / Env | 本仓库 | 证据 / Evidence |
 | --- | --- | --- | --- | --- |
 | Cursor | `~/.cursor/projects/<id>/agent-transcripts/` | — | 内置 | 本机已验证 |
-| Claude Code | `~/.claude/projects/**/*.jsonl` | `CLAUDE_HOME` | 内置 | showagent + 本机 |
+| Claude Code | `~/.claude/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR`, `CLAUDE_HOME` | 内置 | showagent + 本机 |
 | Claude Desktop | `~/Library/Application Support/Claude/local-agent-mode-sessions/` | — | 内置 | 本机目录 |
-| Codex | `~/.codex/sessions/**/*.jsonl` | `CODEX_HOME` | 内置 | showagent + 本机；`originator` 可为 `Codex Desktop` |
-| Grok Build | `~/.grok/sessions/<encoded-cwd>/<session-id>/` | `GROK_HOME` | 内置 | xAI 官方 session 文档 + 本机 Grok 1.0.5 |
+| Codex | `~/.codex/{sessions,archived_sessions}/**/*.jsonl` | `CODEX_HOME` | 内置 | showagent + 本机；`originator` 可为 `Codex Desktop` |
+| Grok Build | `~/.grok/{sessions,archived_sessions}/<encoded-cwd>/<session-id>/` | `GROK_HOME` | 内置 | xAI 官方 session 文档 + 本机 Grok 1.0.5 |
 | Gemini CLI | `~/.gemini/tmp/<project_hash>/chats/session-*` | `GEMINI_CLI_HOME` / `GEMINI_DIR` | 内置 | 官方 session-management 文档 |
 | OpenCode | `~/.local/share/opencode/opencode.db` 与 `storage/session/` | `OPENCODE_DATA_HOME` | 内置 | OpenCode docs / issues |
 | Pi | `~/.pi/agent/sessions/**/*.jsonl` | `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` | 内置 | Pi 官方 sessions 文档 |
