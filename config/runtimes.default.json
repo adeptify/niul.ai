@@ -1,0 +1,27 @@
+{
+  "pollMs": 2500,
+  "workingWindowMs": 25000,
+  "maxOfflineAgeMs": 259200000,
+  "maxSessions": 60,
+  "runtimes": {
+    "cursor": { "enabled": true, "label": "Cursor", "process": ["Cursor"], "focusApp": "Cursor", "openBin": "cursor" },
+    "claude-code": { "enabled": true, "label": "Claude Code", "process": ["claude"], "focusApp": "Claude", "openBin": "claude" },
+    "claude-desktop": { "enabled": true, "label": "Claude Desktop", "process": ["Claude"], "focusApp": "Claude" },
+    "codex": { "enabled": true, "label": "Codex", "process": ["codex", "Codex"], "focusApp": "Codex", "openBin": "codex" },
+    "gemini": { "enabled": true, "label": "Gemini CLI", "process": ["gemini"], "openBin": "gemini" },
+    "opencode": { "enabled": true, "label": "OpenCode", "process": ["opencode"], "focusApp": "OpenCode", "openBin": "opencode" },
+    "pi": { "enabled": true, "label": "Pi", "process": ["pi-coding-agent", "@mariozechner/pi"], "openBin": "pi" },
+    "aider": { "enabled": true, "label": "Aider", "process": ["aider"], "openBin": "aider" },
+    "continue": { "enabled": true, "label": "Continue", "process": ["continue"] },
+    "windsurf": { "enabled": true, "label": "Windsurf", "process": ["Windsurf"], "focusApp": "Windsurf", "openBin": "windsurf" },
+    "copilot": { "enabled": true, "label": "GitHub Copilot", "process": ["Copilot"] },
+    "crush": { "enabled": true, "label": "Crush", "process": ["crush"], "openBin": "crush" },
+    "goose": { "enabled": true, "label": "Goose", "process": ["goose"], "openBin": "goose" },
+    "amp": { "enabled": true, "label": "Amp", "process": ["amp"], "openBin": "amp" },
+    "cline": { "enabled": true, "label": "Cline", "process": ["cline"] },
+    "zed": { "enabled": true, "label": "Zed", "process": ["Zed"], "focusApp": "Zed", "openBin": "zed" },
+    "warp": { "enabled": true, "label": "Warp", "process": ["Warp"], "focusApp": "Warp" },
+    "chatgpt": { "enabled": true, "label": "ChatGPT", "process": ["ChatGPT"], "focusApp": "ChatGPT" }
+  },
+  "custom": []
+}

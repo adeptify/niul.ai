@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <!--
+      THESIS: A brick-calf desktop pet that reports which local AI sessions are working, idle, or gone — not a sleek ops dashboard.
+      OWN-WORLD: Magenta-keyed amateur 3D cow, terracotta brick, dusty cream bubble, thick uneven ink borders.
+      STORY: Glance the cow; read the bubble; click a row to jump to that session.
+      FIRST VIEWPORT: Speech bubble stacked above the calf, session list inside, cow as the only character on a fully transparent desktop.
+      FORM: Operate surface dressed as a 牛来 still. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <meta charset="UTF-8" />
+    <title>牛来</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="hit">
+      <section class="bubble" id="bubble">
+        <header class="bubble-head">
+          <strong>哞</strong>
+          <span id="summary">正在找本机的 AI…</span>
+          <button id="gear" type="button" title="配置 Runtime">⚙</button>
+        </header>
+        <ul id="list"></ul>
+      </section>
+      <div class="cow-wrap" id="cowWrap">
+        <canvas id="cow" width="360" height="360"></canvas>
+      </div>
+    </div>
+    <aside id="settings" hidden>
+      <h2>Runtime</h2>
+      <p>关掉不需要的。自定义用 glob 指向 session 文件。</p>
+      <div id="runtimeToggles"></div>
+      <label>自定义 JSON</label>
+      <textarea id="customJson" rows="6" spellcheck="false"></textarea>
+      <div class="settings-actions">
+        <button id="saveSettings" type="button">保存</button>
+        <button id="closeSettings" type="button">关闭</button>
+      </div>
+    </aside>
+    <script src="app.js"></script>
+  </body>
+</html>

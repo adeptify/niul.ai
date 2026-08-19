@@ -1,0 +1,17 @@
+{
+  "name": "niul.ai",
+  "productName": "牛来",
+  "version": "0.1.0",
+  "description": "macOS desktop pet that watches local AI runtime sessions",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6"
+  }
+}
