@@ -6,7 +6,6 @@ function setCowSoundEnabled(enabled) {
 }
 
 function cowAudio() {
-  if (!cowSoundEnabled) return null;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return null;
   if (!cowAudioContext) cowAudioContext = new AC();

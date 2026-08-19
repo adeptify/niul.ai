@@ -17,6 +17,8 @@ const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
 const { windowPositionForCursor } = require("./window-position");
 
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 let win;
 let tray;
 let config;
@@ -25,7 +27,6 @@ let memoTimer;
 let windowDrag = null;
 let ignoreMouseRequested = true;
 let lastSnapshot = null;
-app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
@@ -98,7 +99,6 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.webContents.setAudioMuted(false);
   win.once("ready-to-show", () => win && win.showInactive());
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 }

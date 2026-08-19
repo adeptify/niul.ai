@@ -5,6 +5,21 @@ const STATUS_TEXT = {
   offline: "回棚",
 };
 
+const STATUS_HEADING = {
+  working: "正在拉犁",
+  waiting: "停犁等你",
+  idle: "正在吃草",
+  offline: "已回棚",
+  all: "所有会话",
+};
+
+const STATUS_CHANGE = {
+  working: (row) => `${row.cwdName || row.title || row.label} 套上犁了。`,
+  waiting: (row) => `${row.cwdName || row.title || row.label} 停犁了，正等你。`,
+  idle: (row) => `${row.cwdName || row.title || row.label} 去吃草了。`,
+  offline: (row) => `${row.label} 回棚了。`,
+};
+
 const COW_SKINS = [
   {
     id: "original",
@@ -136,7 +151,6 @@ const PREVIEW_SNAPSHOT = {
       runtime: "codex",
       label: "Codex",
       status: "waiting",
-      statusText: "停犁",
       statusReason: "Codex 已完成最近一轮",
       cwdName: "desktop-agent",
       cwd: "/Users/you/code/desktop-agent",
@@ -149,7 +163,6 @@ const PREVIEW_SNAPSHOT = {
       runtime: "grok",
       label: "Grok Build",
       status: "waiting",
-      statusText: "停犁",
       statusReason: "Grok 已完成最近一轮",
       cwdName: "agent-lab",
       cwd: "/Users/you/code/agent-lab",
@@ -181,6 +194,7 @@ const PREVIEW_SNAPSHOT = {
 function previewApi() {
   let previewConfig = structuredClone(PREVIEW_CONFIG);
   let previewMemos = [];
+  const noop = () => {};
   return {
     scan: async () => ({ ...PREVIEW_SNAPSHOT, scannedAt: Date.now() }),
     getConfig: async () => previewConfig,
@@ -202,12 +216,12 @@ function previewApi() {
       return true;
     },
     focusSession: async () => true,
-    setIgnoreMouse: () => {},
-    startWindowDrag: () => {},
-    moveWindowDrag: () => {},
-    endWindowDrag: () => {},
-    onRequestScan: () => () => {},
-    onMemoDue: () => () => {},
+    setIgnoreMouse: noop,
+    startWindowDrag: noop,
+    moveWindowDrag: noop,
+    endWindowDrag: noop,
+    onRequestScan: () => noop,
+    onMemoDue: () => noop,
   };
 }
 
@@ -308,7 +322,7 @@ async function prepareCowFrame(src) {
 }
 
 function drawPreparedFrame(prepared, canvas) {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(prepared, 0, 0, canvas.width, canvas.height);
 }
@@ -415,9 +429,8 @@ async function rollCow() {
 }
 
 function runtimeQuality(id) {
-  if (["cursor", "claude-code", "codex", "grok"].includes(id)) {
-    return ["claude-code", "codex", "grok"].includes(id) ? "事件状态 · Token" : "事件级状态";
-  }
+  if (["claude-code", "codex", "grok"].includes(id)) return "事件状态 · Token";
+  if (id === "cursor") return "事件级状态";
   if (["claude-desktop", "gemini", "opencode", "pi"].includes(id)) return "Session 活动";
   return "基础检测";
 }
@@ -706,15 +719,8 @@ function renderSessionRows(snapshot) {
     activeStatusFilter === "all"
       ? runtimeRows
       : runtimeRows.filter((row) => row.status === activeStatusFilter);
-  const headingCopy = {
-    working: "正在拉犁",
-    waiting: "停犁等你",
-    idle: "正在吃草",
-    offline: "已回棚",
-    all: "所有会话",
-  };
   document.getElementById("sessionHeading").textContent =
-    headingCopy[activeStatusFilter] || "Session";
+    STATUS_HEADING[activeStatusFilter] || "Session";
   document.getElementById("sessionTotal").textContent =
     activeRuntimeFilter === "all" && activeStatusFilter === "all"
       ? `${rows.length} 个`
@@ -728,7 +734,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>当前筛选下没有 Session</strong>
-          <span>默认只看「拉犁」。上面还有其他状态，或点「全部」看完整巡视。</span>
+          <span>默认只看「${STATUS_TEXT.working}」。上面还有其他状态，或点「全部」看完整巡视。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="show-all">查看全部</button>
           </div>
@@ -738,7 +744,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>暂时没发现 Session</strong>
-          <span>默认只看「拉犁」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
+          <span>默认只看「${STATUS_TEXT.working}」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="open-settings">打开设置</button>
           </div>
@@ -883,15 +889,9 @@ function announceStatusChanges(previousRows, nextRows) {
     .sort((a, b) => (priority[a.status] ?? 9) - (priority[b.status] ?? 9));
   if (!changes.length) return;
   const row = changes[0];
-  const name = row.cwdName || row.title || row.label;
-  const copy = {
-    working: `${name} 套上犁了。`,
-    waiting: `${name} 停犁了，正等你。`,
-    idle: `${name} 去吃草了。`,
-    offline: `${row.label} 回棚了。`,
-  };
+  const copy = STATUS_CHANGE[row.status];
   const suffix = changes.length > 1 ? ` 另外 ${changes.length - 1} 条也有动静。` : "";
-  showCaption(`${copy[row.status] || `${name} 状态变了。`}${suffix}`, 4200);
+  showCaption(`${copy ? copy(row) : `${row.cwdName || row.title || row.label} 状态变了。`}${suffix}`, 4200);
 }
 
 async function tick() {
@@ -1112,7 +1112,6 @@ function bindCowInteraction() {
   const beginWindowDrag = (event) => {
     pointerDown.dragging = true;
     stage.classList.add("is-dragging");
-    api.setIgnoreMouse(false);
     api.startWindowDrag({
       originX: pointerDown.screenX,
       originY: pointerDown.screenY,
@@ -1483,7 +1482,7 @@ function armMousePassthrough() {
 function scheduleScanning() {
   window.clearInterval(scanTimer);
   scanTimer = window.setInterval(() => {
-    if (!document.hidden && !pointerDown?.dragging) tick();
+    if (!document.hidden) tick();
   }, config.pollMs || 2500);
 }
 
