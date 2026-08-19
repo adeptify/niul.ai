@@ -65,11 +65,34 @@ function snapshotProcesses() {
   }
 }
 
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const PROCESS_BLOCKLIST = [
+  "CursorUIViewService",
+  "AMPDevices",
+  "AMPDeviceDiscovery",
+  "Codex Framework",
+  "crashpad",
+  "TextInputUI",
+];
+
 function isOnline(procs, needles) {
   if (!needles || !needles.length) return false;
   return procs.some((p) => {
-    const hay = `${p.comm} ${p.args}`.toLowerCase();
-    return needles.some((n) => n && hay.includes(String(n).toLowerCase()));
+    const hay = `${p.comm} ${p.args}`;
+    if (PROCESS_BLOCKLIST.some((b) => hay.includes(b))) return false;
+    if (/\bbuiltin export PATH\b/.test(hay)) return false;
+    return needles.some((n) => {
+      if (!n) return false;
+      const token = new RegExp(`(?:^|[\\s\\/\\\\])${escapeRe(n)}(?:[\\s:]|$)`, "i");
+      if (token.test(p.comm)) return true;
+      if (hay.includes(`/Applications/${n}.app`)) return true;
+      const first = (p.args || "").split(" ").slice(0, 2).join(" ");
+      const bin = new RegExp(`(?:^|[\\s])(?:[^\\s]*\\/)?${escapeRe(n)}(?:\\s|$)`, "i");
+      return bin.test(first);
+    });
   });
 }
 
