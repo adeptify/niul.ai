@@ -1,53 +1,116 @@
 <p align="center">
-  <img src="assets/niulai-product-logo-v1.png" width="128" height="128" alt="牛来">
+  <img src="assets/niulai-product-logo-v1.png" width="120" height="120" alt="牛来">
 </p>
 
-# 牛来 / niul.ai
+<h1 align="center">AI 开了一堆，谁在干活？让牛来帮你盯着。</h1>
 
-macOS 桌宠：一头尽量还原电影《牛来》的业余手搓 3D 黄牛（短角、黄色短绒、紫灰色口鼻与手脚、半眯方眼、直立且动作僵硬）。它浮在桌面最上层，头顶气泡列出本机 AI Runtime / 桌面端 / CLI / 开源 Agent 的 Session。
+<p align="center">
+  一头驻扎在 macOS 桌面的小牛牛，替你巡视 Cursor、Claude Code、Codex、Grok Build 和其他本地 AI Session。
+</p>
 
-A macOS always-on-top desktop pet. The character recreates the *Niu Lai* movie look: short horns, fuzzy yellow body, purple-gray muzzle and limbs, half-lidded rectangular eyes, bipedal stance, and deliberately stiff amateur 3D motion. A speech bubble above it lists local AI runtime / desktop / CLI / open-source agent sessions.
+<p align="center">
+  它不写代码，只负责看谁在拉犁、谁在等你、谁又偷偷跑去吃草。
+</p>
 
-仓库 / Repo: [https://github.com/adeptify/niul.ai](https://github.com/adeptify/niul.ai)
+<p align="center">
+  <a href="https://github.com/adeptify/niul.ai/releases/latest"><b>下载最新版</b></a>
+  ·
+  <a href="#它到底会干嘛">它会干嘛</a>
+  ·
+  <a href="#支持的-runtime">支持的 Runtime</a>
+</p>
+
+<p align="center">
+  <img src="assets/github-social-preview.png" width="100%" alt="Niul.ai 牛来">
+</p>
+
+## 你开了很多 AI，但你已经忘了它们在哪
+
+Cursor 开着。Claude Code 也开着。Codex 好像刚跑完，但你不确定。
+
+还有一个 Session 躲在角落里等你确认，已经等了二十分钟。
+
+**牛来知道。**
+
+它浮在桌面最上层，把本机 AI Session 翻译成四句牛话：
+
+- 🟢 **拉犁**：正在工作
+- 🔵 **停犁**：这一轮完成了，正在等你
+- 🟡 **吃草**：Runtime 还在，但 Session 闲置了
+- ⚫ **回棚**：Runtime 已经不在线
+
+不用反复切窗口，也不用盯着一排终端。**看一眼牛，就知道谁还在干活。**
+
+## 它到底会干嘛
+
+### 一眼看完所有 AI Session
+
+气泡里显示 Runtime、项目目录、活动状态、判定依据和今日 Token。支持按状态与 Runtime 筛选，默认只把正在拉犁的 Session 放到你眼前。
+
+### 点谁，就去找谁
+
+点击 Session，直接唤起对应的 Runtime App。Codex 就打开 Codex，不会把项目名误当成 App，也不会把 Finder 文件夹丢到你脸上。
+
+### 它真的会盯着工作
+
+状态变化时，牛会抬头、张嘴，然后告诉你：
+
+> 哞，niul.ai 停犁了，正等你。
+
+牛会眨眼、看向你正在悬停的 Session，也会在你拖动时乖乖跟着走。拖到上半屏，气泡自动跑到牛下面；拖回下半屏，气泡重新回到头顶。
+
+### 今天又烧了多少 Token
+
+读取 Codex、Claude Code、Grok Build、Gemini CLI 本机日志里的明确 usage。不按文字长度瞎猜，不把历史上下文伪装成新增消耗，Cursor 没公开的数据也不会硬估。
+
+### 一头牛不够，那就 Roll
+
+原版牛、小裙子牛、头箍牛、学习牛、书包牛、跳舞牛、足球牛……目前一共九头，而且每头都多少有点不正常。
+
+<p align="center">
+  <img src="assets/niulai-skirt-v1.png" width="15%" alt="小裙子牛来">
+  <img src="assets/niulai-study-v1.png" width="15%" alt="学习牛来">
+  <img src="assets/niulai-backpack-v1.png" width="15%" alt="书包牛来">
+  <img src="assets/niulai-dance-v1.png" width="15%" alt="跳舞牛来">
+  <img src="assets/niulai-football-v1.png" width="15%" alt="足球牛来">
+</p>
+
+## 一些没必要但不能没有的东西
+
+- 单击牛：展开或收起 Session
+- 双击牛：摸一下
+- 右键牛：快速记 Memo，可选 15 分钟、1 小时或明早提醒
+- `⌘⇧U`：随时召唤或隐藏
+- 状态变化：牛会带着一声「哞」碎嘴播报
+- 快速连点五下：**不建议在工作时间尝试**
+
+## 本地优先
+
+牛来不需要登录你的 AI 账号，不上传 Session，也不接第三方统计服务。
+
+扫描、状态判断、Token 汇总和 Memo 都留在你的 Mac 上。它只是看起来不太聪明。
+
+<details>
+<summary><b>English</b></summary>
+
+Niul.ai is a weirdly useful always-on-top macOS desktop pet. It watches local AI sessions across Cursor, Claude Code, Codex, Grok Build, and other runtimes, tells you who is working or waiting, focuses the right app when clicked, and keeps explicit local token usage local.
+
+</details>
 
 ---
 
-## 这是什么 / What this is
+## 三分钟把牛牵回家 / Install
 
-| 中文 | English |
-| --- | --- |
-| 透明无边框窗口，始终置顶，牛可拖动 | Transparent frameless window, always on top, the cow is draggable |
-| 气泡列出扫到的 Session：Runtime 名、状态、工作目录与判定依据 | Bubble lists runtime, state, working directory, and activity evidence |
-| 四态：工作中 / 等你 / 闲置 / 不在线 | States: **working** / **waiting** / **idle** / **offline** |
-| 牛会眨眼；说话有三段嘴型；悬停 Session 时经过中间帧抬头转向 | The cow blinks, speaks through three mouth frames, and turns toward hovered sessions through an in-between frame |
-| 单击牛展开/收起气泡；拖动移动；双击抚摸 | Click to toggle the bubble, drag to move, double-click to pet |
-| 右键牛打开本地快捷 Memo，可选 15 分钟、1 小时或明早提醒 | Right-click the cow for local quick memos and reminder presets |
-| 点一条只打开对应 Runtime App；项目名不会被误当成 App 或 Finder 目录 | Click a row to open its Runtime app, never the project name or Finder folder |
-| 状态与 Runtime 双重筛选，默认只展示“工作中” | Filter by status and Runtime; working sessions are shown by default |
-| 状态变化会触发带“哞”前缀的牛来播报 | State changes trigger a spoken cow notification prefixed with “哞” |
-| 碎嘴可关闭；快速连点牛五下会发现一个可再次连点取消的彩蛋 | Chatter can be muted; five quick clicks reveal a cancellable easter egg |
-| 今日 Token 只读取 Codex、Claude Code、Grok Build、Gemini CLI 的明确 usage；部分记录显示为下界，Cursor 不估算 | Today’s tokens use explicit local usage only; partial records are lower bounds, and Cursor is not estimated |
-| 设置里可分别缩放牛和 Session 气泡，并直接开关 Runtime | Scale the cow and bubble independently and toggle runtimes visually |
-| Roll 池包含九种牛来；电源菜单可收展、隐藏或彻底退出 | Roll among nine cows; the power menu can collapse, hide, or fully quit |
+### 普通用户：直接下载 App
 
-状态判定 / State detection:
+1. 打开 [GitHub Releases](https://github.com/adeptify/niul.ai/releases/latest)
+2. Apple 芯片（M1 / M2 / M3 / M4）下载 `arm64`；Intel Mac 下载 `x64`
+3. 解压 `.zip`，把「牛来」放进应用程序
+4. 第一次启动请在 Finder 里对 App **右键 → 打开**
 
-1. **工作中 / working**：优先读各 Runtime 的事件链（如 Cursor `tool_use`、Codex `task_started`），文件热写入只作为回退
-2. **等你 / waiting**：最近一轮已有明确完成事件，等待用户继续
-3. **闲置 / idle**：Runtime 在运行，但该 Session 已停止活动
-4. **不在线 / offline**：没有发现对应 Runtime 进程
+不需要 Node，不需要打开终端。当前构建尚未使用 Apple Developer ID 签名，因此直接双击可能被 macOS 拦住一次。
 
-完整、按产品可执行的监控方案见 [docs/runtime-monitoring.md](docs/runtime-monitoring.md)。
-
-The full, per-product monitoring plan is in [docs/runtime-monitoring.md](docs/runtime-monitoring.md). Token accounting follows [TokenStep](https://github.com/Backtthefuture/TokenStep)'s local-first rule and [CC-Switch](https://github.com/farion1231/cc-switch)'s importer behavior: explicit usage only, cross-file deduplication, no text-length estimation, and no legacy Grok context estimate mixed into exact totals.
-
----
-
-## 安装与启动 / Install and run
-
-需要 **macOS** 与 **Node 18+**。当前还没有已签名的 GitHub Release，请从源码安装。Requires macOS and Node 18+. There is no signed Release yet.
-
-### 先在终端里跑起来 / Run from source
+### 开发者：从源码启动 / Run from source
 
 在**已经能执行 `node -v`** 的终端里：
 
@@ -58,11 +121,9 @@ npm install
 npm start
 ```
 
-不要只依赖双击：安装脚本启动的是非交互 shell，默认不会读 `~/.zshrc`。脚本会自己查找 nvm / Homebrew / Volta 里的 Node，但若你的 Node 只存在于当前终端会话，请在这个终端里继续操作。
+需要 macOS 与 Node 18+。If Node lives in nvm, run these commands in a terminal where `node -v` already works.
 
-If Node lives in nvm, run these commands in a terminal where `node -v` already works.
-
-### 装成可重复打开的 App / Install the app
+### 从仓库一键安装
 
 同一终端里：
 
@@ -70,11 +131,9 @@ If Node lives in nvm, run these commands in a terminal where `node -v` already w
 zsh 安装牛来.command
 ```
 
-也可以在 Finder 里打开 [`安装牛来.command`](安装牛来.command)。若系统提示无法验证开发者，对它**右键 → 打开**。
+也可以在 Finder 里打开 [`安装牛来.command`](安装牛来.command)。脚本会优先使用现有构建或 GitHub Release，没有可用产物时才从源码打包。
 
-脚本顺序：已有的 `dist` 构建产物 → GitHub Release（若有）→ 用本机 Node 从源码打包。安装位置是 **`~/Applications/牛来.app`**（用户主目录下的应用程序，**不是** `/Applications`）。
-
-The installer copies the app to `~/Applications/牛来.app`, not `/Applications`.
+安装位置是 **`~/Applications/牛来.app`**。The installer copies the app to `~/Applications/牛来.app`, not `/Applications`.
 
 ### 装好之后 / After install
 
@@ -132,7 +191,7 @@ User config is merged on top of the defaults, so new built-in runtimes still app
 
 ---
 
-## 现在能扫到什么 / What is scanned today
+## 支持的 Runtime
 
 内置（可在齿轮里关掉）/ Built-in (toggle in the gear panel):
 
@@ -141,6 +200,14 @@ Cursor · Claude Code · Claude Desktop · Codex · **Grok Build** · Gemini CLI
 方案文档额外覆盖、需要自定义或后续接线的：jcode、Roo、OpenHands 等。见监控方案里的「覆盖表」。
 
 The monitoring doc also covers jcode, Roo, OpenHands, and others that are plan-ready but not all wired as first-class detectors yet. See the coverage table there.
+
+### 它怎么知道谁在干活
+
+牛来优先读取各 Runtime 的明确事件链，例如 Cursor `tool_use`、Codex `task_started` 和任务完成事件；只有拿不到事件时，才会用文件活动作为回退。
+
+今日 Token 参考 [TokenStep](https://github.com/Backtthefuture/TokenStep) 的本地优先原则和 [CC-Switch](https://github.com/farion1231/cc-switch) 的导入逻辑：只统计明确 usage、跨文件去重、不按文本长度估算。
+
+完整的逐 Runtime 监控方案见 [docs/runtime-monitoring.md](docs/runtime-monitoring.md)。
 
 ---
 
@@ -160,6 +227,14 @@ docs/runtime-monitoring.md     各家监控方案
 
 ## 许可与形象 / License and likeness
 
-代码在本仓库。牛的形象是对电影《牛来》业余 3D 黄牛犊的原创还原，供本机桌宠使用，不是官方周边。
+牛来是一只原创的手搓感 3D 小黄牛桌宠：短角、半眯眼、动作有点僵，工作态度倒是很认真。
 
-The code lives in this repo. The calf art is an original recreation of the *Niu Lai* amateur 3D look for this local pet; it is not official merchandise.
+Niul.ai and its calf character are original open-source project assets.
+
+## 最后
+
+它可能不是你最需要的开发工具。
+
+但当你同时开着六个 Agent 时，你会需要一头牛。
+
+如果它替你少找过一次窗口，给牛加颗草：**Star ⭐**
