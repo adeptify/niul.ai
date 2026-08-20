@@ -104,6 +104,12 @@ const PREVIEW_CONFIG = {
   cowScale: 1,
   bubbleScale: 1,
   soundEnabled: true,
+  market: {
+    enabled: true,
+    provider: "eastmoney",
+    reactionsEnabled: true,
+    thresholdPct: 0.1,
+  },
   runtimes: {
     cursor: { enabled: true, label: "Cursor" },
     "claude-code": { enabled: true, label: "Claude Code" },
@@ -191,12 +197,34 @@ const PREVIEW_SNAPSHOT = {
   ],
 };
 
+const PREVIEW_MARKET_SNAPSHOT = {
+  provider: "eastmoney",
+  providerLabel: "东方财富",
+  fetchedAt: Date.now(),
+  status: "fresh",
+  stale: false,
+  error: "",
+  nextPollMs: 60_000,
+  reaction: null,
+  quotes: [
+    { id: "sse", name: "上证指数", shortName: "上证", price: 3742.31, changePct: 0.18, status: "fresh" },
+    { id: "szse", name: "深证成指", shortName: "深证", price: 11824.6, changePct: 0.42, status: "fresh" },
+    { id: "chinext", name: "创业板指", shortName: "创业板", price: 2459.18, changePct: -0.16, status: "fresh" },
+    { id: "csi300", name: "沪深300", shortName: "沪深300", price: 4321.07, changePct: 0.09, status: "fresh" },
+    { id: "hsi", name: "恒生指数", shortName: "恒生", price: 25214.42, changePct: -0.31, status: "fresh" },
+    { id: "spx", name: "标普500", shortName: "标普500", price: 6812.04, changePct: 0.27, status: "fresh" },
+    { id: "ndx", name: "纳斯达克100", shortName: "纳指100", price: 24861.7, changePct: 0.54, status: "fresh" },
+    { id: "djia", name: "道琼斯指数", shortName: "道琼斯", price: 49122.08, changePct: -0.08, status: "fresh" },
+  ],
+};
+
 function previewApi() {
   let previewConfig = structuredClone(PREVIEW_CONFIG);
   let previewMemos = [];
   const noop = () => {};
   return {
     scan: async () => ({ ...PREVIEW_SNAPSHOT, scannedAt: Date.now() }),
+    getMarketSnapshot: async () => ({ ...PREVIEW_MARKET_SNAPSHOT, fetchedAt: Date.now() }),
     getConfig: async () => previewConfig,
     saveConfig: async (next) => {
       previewConfig = next;
@@ -248,7 +276,9 @@ let latestSnapshot = null;
 let lastListRenderKey = "";
 let draftCustom = [];
 let scanTimer;
+let marketTimer;
 let tickInFlight = false;
+let marketTickInFlight = false;
 let captionTimer;
 let speakingTimer;
 let blinkTimer;
@@ -258,6 +288,8 @@ let expressionTimer;
 let attentionTimer;
 let stateChangeTimer;
 let stateChangeFrame;
+let marketReactionTimer;
+let marketReactionFlushTimer;
 let toastTimer;
 let cowClickTimer;
 let mooMarathonTimer;
@@ -269,6 +301,9 @@ let suppressClick = false;
 let memoReminder = "0";
 let hasInitialSnapshot = false;
 let chatterEnabled = localStorage.getItem("niulai.chatter") !== "false";
+let latestMarketSnapshot = null;
+let pendingMarketReaction = null;
+let priorityBusyUntil = 0;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -455,6 +490,186 @@ function formatTokens(tokens) {
   if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 1 : 2)}M`;
   if (value >= 1000) return `${(value / 1000).toFixed(value >= 100000 ? 0 : 1)}K`;
   return String(Math.round(value));
+}
+
+const MARKET_INDEX_ORDER = [
+  { id: "sse", shortName: "上证" },
+  { id: "szse", shortName: "深证" },
+  { id: "chinext", shortName: "创业板" },
+  { id: "csi300", shortName: "沪深300" },
+  { id: "hsi", shortName: "恒生" },
+  { id: "spx", shortName: "标普500" },
+  { id: "ndx", shortName: "纳指100" },
+  { id: "djia", shortName: "道琼斯" },
+];
+
+function formatMarketNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return new Intl.NumberFormat("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  }).format(number);
+}
+
+function formatMarketPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return `${number > 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function marketDirection(value) {
+  const number = Number(value || 0);
+  if (number > 0) return "up";
+  if (number < 0) return "down";
+  return "flat";
+}
+
+function renderMarket(snapshot) {
+  const board = document.getElementById("marketBoard");
+  const grid = document.getElementById("marketGrid");
+  const meta = document.getElementById("marketMeta");
+  const enabled = config?.market?.enabled !== false;
+  board.hidden = !enabled;
+  if (!enabled) return;
+
+  latestMarketSnapshot = snapshot;
+  board.classList.toggle("is-stale", snapshot?.status === "stale");
+  board.classList.toggle("is-unavailable", snapshot?.status === "unavailable");
+  const provider = snapshot?.providerLabel || "东方财富";
+
+  if (!snapshot || snapshot.status === "unavailable") {
+    meta.textContent = `${provider} · 暂时连不上`;
+    meta.title = snapshot?.error || "稍后自动重试";
+    grid.className = "market-grid is-empty";
+    grid.innerHTML = '<span class="market-empty">行情暂时没回来，牛会自己重试。</span>';
+    return;
+  }
+
+  if (snapshot.status === "stale") {
+    meta.textContent = `${provider} · 数据可能延迟`;
+  } else if (snapshot.error) {
+    meta.textContent = `${provider} · 使用上次数据，正在重试`;
+  } else {
+    meta.textContent = `${provider} · ${timeAgo(snapshot.fetchedAt)}更新`;
+  }
+  meta.title = snapshot.error || "主要指数行情，可能存在延迟";
+
+  const byId = new Map((snapshot.quotes || []).map((quote) => [quote.id, quote]));
+  grid.className = "market-grid";
+  grid.innerHTML = MARKET_INDEX_ORDER.map((definition) => {
+    const quote = byId.get(definition.id);
+    if (!quote) {
+      return `
+        <div class="market-quote is-flat is-missing" aria-label="${definition.shortName} 暂无数据">
+          <span class="market-quote-name">${definition.shortName}</span>
+          <i class="market-quote-change">—</i>
+          <b class="market-quote-price">—</b>
+        </div>`;
+    }
+    const direction = marketDirection(quote.changePct);
+    const arrow = direction === "up" ? "↑" : direction === "down" ? "↓" : "·";
+    const price = formatMarketNumber(quote.price);
+    const percent = formatMarketPercent(quote.changePct);
+    const movement = direction === "up" ? "上涨" : direction === "down" ? "下跌" : "平盘";
+    const freshness = quote.status === "stale" ? " is-stale" : "";
+    const delayCopy = quote.status === "stale" ? "，数据可能延迟" : "";
+    return `
+      <div class="market-quote is-${direction}${freshness}" tabindex="0" data-market-id="${escapeHtml(quote.id)}"
+           aria-label="${escapeHtml(quote.name)} ${price}，${movement} ${percent}${delayCopy}">
+        <span class="market-quote-name">${escapeHtml(quote.shortName || quote.name)}</span>
+        <i class="market-quote-change">${arrow} ${percent}</i>
+        <b class="market-quote-price">${price}</b>
+      </div>`;
+  }).join("");
+
+  for (const element of grid.querySelectorAll("[data-market-id]")) {
+    element.addEventListener("pointerenter", () => pointCowAtMarket(element));
+    element.addEventListener("pointerleave", stopCowPointing);
+    element.addEventListener("focus", () => pointCowAtMarket(element));
+    element.addEventListener("blur", stopCowPointing);
+  }
+}
+
+function marketReactionCopy(event) {
+  const percent = formatMarketPercent(event.changePct);
+  const name = event.shortName || event.name;
+  if (event.reversal) {
+    return `${name}${event.direction === "up" ? "翻红" : "翻绿"}了，现在 ${percent}。`;
+  }
+  if (event.band >= 2) {
+    return `今天风有点大，${name}${event.direction === "up" ? "涨到" : "跌到"} ${percent}。`;
+  }
+  if (event.band >= 1) {
+    return `${name}${event.direction === "up" ? "今天跑得挺快" : "今天有点颠"}，${percent}。`;
+  }
+  if (event.band >= 0.5) {
+    return `${name}${event.direction === "up" ? "有点来劲" : "往下滑了"}，${percent}。`;
+  }
+  return `${name}${event.direction === "up" ? "开始往上拱了" : "往下走了"}，${percent}。`;
+}
+
+function marketReactionIsBlocked() {
+  const stage = document.getElementById("cowStage");
+  return (
+    Date.now() < priorityBusyUntil ||
+    Boolean(pointerDown) ||
+    document.getElementById("settings")?.open ||
+    !document.getElementById("quickMemo")?.hidden ||
+    stage?.matches(
+      ".is-speaking, .is-observing-session, .is-petted, .is-rolling, .is-dragging, .is-moo-marathon"
+    )
+  );
+}
+
+function markPriorityBusy(duration) {
+  priorityBusyUntil = Math.max(priorityBusyUntil, Date.now() + duration);
+  window.clearTimeout(marketReactionFlushTimer);
+  marketReactionFlushTimer = window.setTimeout(flushMarketReaction, duration + 80);
+}
+
+function flushMarketReaction() {
+  window.clearTimeout(marketReactionFlushTimer);
+  const event = pendingMarketReaction;
+  if (!event) return;
+  if (
+    !chatterEnabled ||
+    config?.market?.enabled === false ||
+    config?.market?.reactionsEnabled === false ||
+    Date.now() > Number(event.expiresAt || 0)
+  ) {
+    pendingMarketReaction = null;
+    return;
+  }
+  if (marketReactionIsBlocked()) {
+    marketReactionFlushTimer = window.setTimeout(flushMarketReaction, 800);
+    return;
+  }
+
+  pendingMarketReaction = null;
+  const stage = document.getElementById("cowStage");
+  const className = event.direction === "up" ? "is-market-reacting-up" : "is-market-reacting-down";
+  stage.classList.remove("is-market-reacting-up", "is-market-reacting-down");
+  requestAnimationFrame(() => stage.classList.add(className));
+  window.clearTimeout(marketReactionTimer);
+  marketReactionTimer = window.setTimeout(
+    () => stage.classList.remove("is-market-reacting-up", "is-market-reacting-down"),
+    820
+  );
+  const suffix = event.additionalCount ? ` 另外 ${event.additionalCount} 个指数也有动静。` : "";
+  showCaption(`${marketReactionCopy(event)}${suffix}`, 3600, {
+    speechDuration: event.band >= 1 ? 1300 : 900,
+  });
+  if (event.band >= 1) playCowMoo("short");
+}
+
+function queueMarketReaction(event) {
+  if (!event) return;
+  if (!pendingMarketReaction || Math.abs(event.changePct) >= Math.abs(pendingMarketReaction.changePct)) {
+    pendingMarketReaction = event;
+  }
+  flushMarketReaction();
 }
 
 function spokenText(message) {
@@ -907,6 +1122,7 @@ function pointCowAt(element) {
   pet.classList.add("is-observing-session");
   stage.classList.add("is-observing-session");
   document.querySelector(".session-row.is-pointed-at")?.classList.remove("is-pointed-at");
+  document.querySelector(".market-quote.is-pointed-at")?.classList.remove("is-pointed-at");
   element.classList.add("is-pointed-at");
   const row = latestRows.find((item) => String(item.id) === String(element.dataset.id));
   if (row) {
@@ -926,6 +1142,36 @@ function pointCowAt(element) {
   }
 }
 
+function pointCowAtMarket(element) {
+  if (document.getElementById("bubble").classList.contains("is-collapsed")) return;
+  const quote = latestMarketSnapshot?.quotes?.find(
+    (item) => String(item.id) === String(element.dataset.marketId)
+  );
+  if (!quote) return;
+  const pet = document.getElementById("pet");
+  const stage = document.getElementById("cowStage");
+  pet.classList.add("is-observing-session");
+  stage.classList.add("is-observing-session");
+  document.querySelector(".session-row.is-pointed-at")?.classList.remove("is-pointed-at");
+  document.querySelector(".market-quote.is-pointed-at")?.classList.remove("is-pointed-at");
+  element.classList.add("is-pointed-at");
+  const observedId = `market:${quote.id}`;
+  stage.dataset.observingId = observedId;
+  window.clearTimeout(attentionTimer);
+  setCowExpression("turning");
+  attentionTimer = window.setTimeout(() => {
+    if (stage.dataset.observingId !== observedId) return;
+    const direction = marketDirection(quote.changePct);
+    const movement = direction === "up" ? "涨" : direction === "down" ? "跌" : "平";
+    showCaption(
+      `${quote.shortName || quote.name} ${formatMarketNumber(quote.price)}，${movement} ${formatMarketPercent(quote.changePct)}。`,
+      0,
+      { attention: true, speechDuration: 900 }
+    );
+    document.getElementById("cowCaption").classList.add("is-session-focus");
+  }, 150);
+}
+
 function stopCowPointing() {
   const pet = document.getElementById("pet");
   pet?.classList.remove("is-observing-session");
@@ -936,6 +1182,7 @@ function stopCowPointing() {
     delete stage.dataset.observingId;
   }
   document.querySelector(".session-row.is-pointed-at")?.classList.remove("is-pointed-at");
+  document.querySelector(".market-quote.is-pointed-at")?.classList.remove("is-pointed-at");
   const caption = document.getElementById("cowCaption");
   caption?.classList.remove("is-session-focus", "is-visible");
   stopSpeaking();
@@ -946,17 +1193,23 @@ function stopCowPointing() {
 }
 
 function announceStatusChanges(previousRows, nextRows) {
-  if (!hasInitialSnapshot || !chatterEnabled) return;
+  if (!hasInitialSnapshot || !chatterEnabled) return false;
   const previous = new Map(previousRows.map((row) => [String(row.id), row.status]));
   const priority = { working: 0, waiting: 1, idle: 2, offline: 3 };
   const changes = nextRows
     .filter((row) => previous.has(String(row.id)) && previous.get(String(row.id)) !== row.status)
     .sort((a, b) => (priority[a.status] ?? 9) - (priority[b.status] ?? 9));
-  if (!changes.length) return;
+  if (!changes.length) return false;
   const row = changes[0];
   const copy = STATUS_CHANGE[row.status];
   const suffix = changes.length > 1 ? ` 另外 ${changes.length - 1} 条也有动静。` : "";
+  document.getElementById("cowStage")?.classList.remove(
+    "is-market-reacting-up",
+    "is-market-reacting-down"
+  );
+  markPriorityBusy(4200);
   showCaption(`${copy ? copy(row) : `${row.cwdName || row.title || row.label} 状态变了。`}${suffix}`, 4200);
+  return true;
 }
 
 async function tick() {
@@ -982,6 +1235,46 @@ async function tick() {
   } finally {
     tickInFlight = false;
     beacon.classList.remove("is-scanning");
+  }
+}
+
+function scheduleMarketPolling(delay = 60_000) {
+  window.clearTimeout(marketTimer);
+  if (config?.market?.enabled === false) return;
+  const wait = Math.max(15_000, Math.min(300_000, Number(delay) || 60_000));
+  marketTimer = window.setTimeout(() => {
+    if (document.hidden) {
+      scheduleMarketPolling(60_000);
+      return;
+    }
+    tickMarket();
+  }, wait);
+}
+
+async function tickMarket({ force = false } = {}) {
+  if (marketTickInFlight || typeof api.getMarketSnapshot !== "function") return;
+  if (config?.market?.enabled === false) {
+    renderMarket({ status: "disabled", quotes: [] });
+    window.clearTimeout(marketTimer);
+    return;
+  }
+  marketTickInFlight = true;
+  let nextPollMs = 60_000;
+  try {
+    const snapshot = await api.getMarketSnapshot({ force });
+    nextPollMs = snapshot.nextPollMs || nextPollMs;
+    renderMarket(snapshot);
+    if (snapshot.reaction) queueMarketReaction(snapshot.reaction);
+  } catch (error) {
+    renderMarket({
+      providerLabel: "东方财富",
+      status: "unavailable",
+      error: String(error?.message || error),
+      quotes: [],
+    });
+  } finally {
+    marketTickInFlight = false;
+    scheduleMarketPolling(nextPollMs);
   }
 }
 
@@ -1020,6 +1313,7 @@ function maybeShowFirstRunHint(snapshot) {
   if (localStorage.getItem("niulai.firstRunHint") === "1") return;
   localStorage.setItem("niulai.firstRunHint", "1");
   const hasWorking = (snapshot?.counts?.working || 0) > 0;
+  markPriorityBusy(4200);
   showCaption(
     hasWorking
       ? "牛来看着这些 Session。⌘⇧U 可隐藏。"
@@ -1072,6 +1366,7 @@ function setChatterEnabled(enabled) {
   localStorage.setItem("niulai.chatter", String(chatterEnabled));
   syncChatterMenu();
   if (!chatterEnabled && mooMarathonEndsAt) stopMooMarathon(false);
+  if (!chatterEnabled) pendingMarketReaction = null;
   showCaption(chatterEnabled ? "我可以碎嘴了。" : "行，我少说两句。", 1700);
 }
 
@@ -1333,6 +1628,7 @@ function bindMemo() {
   });
   if (typeof api.onMemoDue === "function") {
     api.onMemoDue((memo) => {
+      markPriorityBusy(5000);
       showCaption(`提醒：${memo.text}`, 5000);
       showToast("有一条 Memo 到时间了");
       if (!panel.hidden) renderMemos();
@@ -1376,9 +1672,26 @@ function fillSettings(nextConfig) {
     .join("");
   syncScaleControls(nextConfig);
   document.getElementById("soundEnabled").checked = nextConfig.soundEnabled !== false;
+  const market = nextConfig.market || {};
+  document.getElementById("marketEnabled").checked = market.enabled !== false;
+  document.getElementById("marketReactionsEnabled").checked = market.reactionsEnabled !== false;
+  const threshold = String(Number(market.thresholdPct || 0.1));
+  const thresholdInput = document.querySelector(
+    `input[name="marketThreshold"][value="${CSS.escape(threshold)}"]`
+  );
+  (thresholdInput || document.querySelector('input[name="marketThreshold"][value="0.1"]')).checked = true;
+  syncMarketSettingsAvailability();
   draftCustom = structuredClone(nextConfig.custom || []);
   renderCustomRuntimes();
   hideCustomEditor();
+}
+
+function syncMarketSettingsAvailability() {
+  const enabled = document.getElementById("marketEnabled").checked;
+  document.getElementById("marketReactionsEnabled").disabled = !enabled;
+  for (const input of document.querySelectorAll('input[name="marketThreshold"]')) {
+    input.disabled = !enabled;
+  }
 }
 
 function renderCustomRuntimes() {
@@ -1463,14 +1776,32 @@ async function saveSettings() {
   next.cowScale = Number(document.getElementById("cowScale").value) / 100;
   next.bubbleScale = Number(document.getElementById("bubbleScale").value) / 100;
   next.soundEnabled = document.getElementById("soundEnabled").checked;
+  next.market = {
+    ...(next.market || {}),
+    enabled: document.getElementById("marketEnabled").checked,
+    provider: "eastmoney",
+    reactionsEnabled: document.getElementById("marketReactionsEnabled").checked,
+    thresholdPct: Number(
+      document.querySelector('input[name="marketThreshold"]:checked')?.value || 0.1
+    ),
+  };
   next.custom = structuredClone(draftCustom);
   setSettingsMessage("正在保存…");
   config = await api.saveConfig(next);
   setCowSoundEnabled(config.soundEnabled !== false);
   applyDisplayScale(config);
+  if (config.market?.enabled === false || config.market?.reactionsEnabled === false) {
+    pendingMarketReaction = null;
+  }
+  renderMarket(
+    config.market?.enabled === false
+      ? { status: "disabled", quotes: [] }
+      : latestMarketSnapshot
+  );
   closeSettings();
-  showToast("巡视范围已更新");
+  showToast("桌宠设置已更新");
   await tick();
+  await tickMarket({ force: true });
 }
 
 function bindSettings() {
@@ -1485,6 +1816,10 @@ function bindSettings() {
   document.getElementById("closeSettings").addEventListener("click", closeSettings);
   document.getElementById("cancelSettings").addEventListener("click", closeSettings);
   document.getElementById("saveSettings").addEventListener("click", saveSettings);
+  document.getElementById("marketEnabled").addEventListener(
+    "change",
+    syncMarketSettingsAvailability
+  );
   document.getElementById("showCustomEditor").addEventListener("click", showCustomEditor);
   document.getElementById("cancelCustom").addEventListener("click", hideCustomEditor);
   document.getElementById("addCustom").addEventListener("click", addCustomRuntime);
@@ -1707,6 +2042,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   applyDisplayScale(config);
   fillSettings(config);
   await tick();
+  await tickMarket({ force: true });
   scheduleScanning();
   scheduleBlink();
   scheduleAmbientMotion();

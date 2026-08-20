@@ -33,6 +33,7 @@ function loadConfig(userDataDir) {
   const merged = {
     ...defaults,
     ...user,
+    market: { ...(defaults.market || {}), ...(user.market || {}) },
     runtimes,
     custom: Array.isArray(user.custom) ? user.custom : defaults.custom || [],
     _path: userFile,
@@ -47,6 +48,7 @@ function loadConfig(userDataDir) {
       "cowScale",
       "bubbleScale",
       "soundEnabled",
+      "market",
     ]) {
       if (!(key in user) && key in defaults) merged[key] = defaults[key];
     }

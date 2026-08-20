@@ -11,6 +11,8 @@
   --idle: #efbe48;
   --offline: #88837b;
   --danger: #ee786b;
+  --market-up: #f08072;
+  --market-down: #63c990;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --shadow: 0 18px 48px rgba(18, 14, 8, 0.34), 0 3px 8px rgba(18, 14, 8, 0.28);
 }
@@ -393,8 +395,8 @@ textarea:focus-visible,
 
 .bubble-body {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
-  max-height: 370px;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  max-height: 455px;
   overflow: hidden;
   border-top: 1px solid rgba(255, 255, 255, 0.065);
   opacity: 1;
@@ -418,6 +420,165 @@ textarea:focus-visible,
 
 .bubble.is-collapsed .summary-rail {
   border-color: rgba(255, 255, 255, 0.065);
+}
+
+.market-board {
+  display: grid;
+  background: #211e19;
+}
+
+.market-board[hidden] {
+  display: none;
+}
+
+.market-board.is-stale {
+  background: #26231e;
+}
+
+.market-board-head {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.market-board-head > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.market-board-head strong {
+  color: var(--bone);
+  font-size: 10px;
+  letter-spacing: -0.02em;
+}
+
+.market-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: #b88722;
+  color: #201a0f;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.market-meta {
+  overflow: hidden;
+  color: #aaa091;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-board.is-stale .market-meta,
+.market-board.is-unavailable .market-meta {
+  color: #e2b765;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 74px;
+}
+
+.market-grid.is-loading,
+.market-grid.is-empty {
+  grid-template-columns: 1fr;
+  min-height: 58px;
+  place-items: center;
+}
+
+.market-loading,
+.market-empty {
+  color: #aaa091;
+  font-size: 9px;
+}
+
+.market-quote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name change"
+    "price price";
+  min-width: 0;
+  min-height: 44px;
+  align-content: center;
+  gap: 2px 4px;
+  padding: 5px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.055);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  outline-offset: -2px;
+  cursor: default;
+  transition: background-color 140ms ease;
+}
+
+.market-quote:nth-child(4n) {
+  border-right: 0;
+}
+
+.market-quote:nth-child(n + 5) {
+  border-bottom: 0;
+}
+
+.market-quote:hover,
+.market-quote:focus-visible,
+.market-quote.is-pointed-at {
+  background: rgba(215, 166, 48, 0.09);
+}
+
+.market-quote-name {
+  grid-area: name;
+  overflow: hidden;
+  color: #aaa091;
+  font-size: 8px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-quote-price {
+  grid-area: price;
+  overflow: hidden;
+  color: var(--bone);
+  font-size: 10px;
+  font-weight: 690;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-quote-change {
+  grid-area: change;
+  flex: 0 0 auto;
+  font-size: 8px;
+  font-weight: 720;
+}
+
+.market-quote.is-up .market-quote-change {
+  color: var(--market-up);
+}
+
+.market-quote.is-down .market-quote-change {
+  color: var(--market-down);
+}
+
+.market-quote.is-flat .market-quote-change {
+  color: #aaa091;
+}
+
+.market-board.is-stale .market-quote {
+  opacity: 0.58;
+}
+
+.market-quote.is-stale {
+  opacity: 0.58;
 }
 
 .token-strip {
@@ -1426,6 +1587,99 @@ textarea:focus-visible,
   border-bottom: 1px solid #d8cfc1;
 }
 
+.market-settings {
+  display: grid;
+  gap: 0;
+  margin-bottom: 13px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #d8cfc1;
+}
+
+.provider-label {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #dfd3c2;
+  color: #5b5145;
+  font-size: 8px;
+  font-weight: 680;
+}
+
+.market-toggle {
+  min-height: 39px;
+}
+
+.market-sensitivity {
+  display: grid;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.market-sensitivity legend {
+  padding: 0;
+  color: #4a4339;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.market-sensitivity > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #e3d9cb;
+}
+
+.market-sensitivity label {
+  position: relative;
+  cursor: pointer;
+}
+
+.market-sensitivity input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.market-sensitivity span {
+  display: flex;
+  min-height: 31px;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 6px;
+  border-radius: 7px;
+  color: #655c50;
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.market-sensitivity small {
+  color: #8a7f70;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-sensitivity input:checked + span {
+  background: #fffaf2;
+  box-shadow: 0 2px 5px rgba(67, 52, 31, 0.12);
+  color: #332d25;
+}
+
+.market-sensitivity input:focus-visible + span {
+  outline: 2px solid #a97813;
+  outline-offset: 1px;
+}
+
+.market-settings:has(#marketEnabled:not(:checked)) .market-toggle + .market-toggle,
+.market-settings:has(#marketEnabled:not(:checked)) .market-sensitivity {
+  opacity: 0.48;
+  pointer-events: none;
+}
+
 .scale-control {
   display: grid;
   grid-template-columns: 104px minmax(0, 1fr);
@@ -1849,6 +2103,32 @@ input::placeholder {
   }
   100% {
     transform: translate3d(var(--look-x), var(--look-y), 0) scale(1);
+  }
+}
+
+#pet .cow-stage.is-market-reacting-up .cow-motion {
+  animation: cowMarketUp 760ms var(--ease-out);
+}
+
+#pet .cow-stage.is-market-reacting-down .cow-motion {
+  animation: cowMarketDown 760ms var(--ease-out);
+}
+
+@keyframes cowMarketUp {
+  0%, 100% {
+    transform: translate3d(var(--look-x), var(--look-y), 0) rotate(0);
+  }
+  42% {
+    transform: translate3d(var(--look-x), calc(var(--look-y) - 8px), 0) rotate(1.8deg) scale(1.018);
+  }
+}
+
+@keyframes cowMarketDown {
+  0%, 100% {
+    transform: translate3d(var(--look-x), var(--look-y), 0) rotate(0);
+  }
+  44% {
+    transform: translate3d(var(--look-x), calc(var(--look-y) + 5px), 0) rotate(-1.8deg) scale(0.985, 0.975);
   }
 }
 

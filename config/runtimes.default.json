@@ -1,10 +1,16 @@
 {
-  "configVersion": 5,
+  "configVersion": 6,
   "pollMs": 5000,
   "globalShortcut": "CommandOrControl+Shift+U",
   "cowScale": 1,
   "bubbleScale": 1,
   "soundEnabled": true,
+  "market": {
+    "enabled": true,
+    "provider": "eastmoney",
+    "reactionsEnabled": true,
+    "thresholdPct": 0.1
+  },
   "workingWindowMs": 90000,
   "maxOfflineAgeMs": 259200000,
   "maxSessions": 32,

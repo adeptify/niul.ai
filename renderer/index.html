@@ -2,10 +2,10 @@
 <html lang="zh-CN">
   <head>
     <!--
-      THESIS: The calf itself is the activity monitor; session state changes its posture and the field card above it, refusing a detached dashboard.
-      OWN-WORLD: Ink-black field card, cattle-tag amber, bone-white type, tactile state beacons, and one intentionally rough early-CGI calf.
-      STORY: Read the herd at a glance, open the card when detail matters, and touch the calf to move or acknowledge it.
-      FIRST VIEWPORT: A compact live-status card hovers directly above a breathing calf; active sessions are the first readable detail and controls stay peripheral.
+      THESIS: The calf itself is the activity monitor; Agent state owns its posture while a compact market rail stays visibly secondary, refusing a detached dashboard.
+      OWN-WORLD: Ink-black field card, cattle-tag amber, bone-white type, ruled market cells, tactile state beacons, and one intentionally rough early-CGI calf.
+      STORY: Read the herd first, glance at eight major indices second, and let the calf mention meaningful crossings without stealing focus.
+      FIRST VIEWPORT: Session status leads the field card, a two-row market rail follows inside the expanded body, and the breathing calf remains the largest object.
       FORM: A livestock field-observation tag translated into a macOS desktop utility, staged as one connected pet-and-card object.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -85,6 +85,18 @@
         </div>
 
         <div class="bubble-body" id="bubbleBody">
+          <section class="market-board" id="marketBoard" aria-labelledby="marketTitle">
+            <header class="market-board-head">
+              <div>
+                <span class="market-mark" aria-hidden="true">盘</span>
+                <strong id="marketTitle">大盘</strong>
+              </div>
+              <span class="market-meta" id="marketMeta">东方财富 · 正在看盘</span>
+            </header>
+            <div class="market-grid is-loading" id="marketGrid" aria-label="主要市场指数">
+              <span class="market-loading">正在读取中、港、美主要指数…</span>
+            </div>
+          </section>
           <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
             <span class="token-mark" aria-hidden="true">T</span>
             <span class="token-copy">
@@ -164,7 +176,7 @@
         <header class="settings-head">
           <div>
             <h2 id="settingsTitle">桌宠设置</h2>
-            <p>调整大小和牛来要巡视的 Runtime。</p>
+            <p>调整大小、行情和牛来要巡视的 Runtime。</p>
           </div>
           <button class="icon-button light" id="closeSettings" type="button" aria-label="关闭设置">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
@@ -192,6 +204,37 @@
             </span>
             <input id="soundEnabled" type="checkbox" checked />
           </label>
+        </section>
+        <section class="market-settings" aria-labelledby="marketSettingsTitle">
+          <div class="section-heading">
+            <div>
+              <h3 id="marketSettingsTitle">大盘</h3>
+              <p>直接展示中、港、美主要指数。</p>
+            </div>
+            <span class="provider-label">东方财富</span>
+          </div>
+          <label class="preference-toggle market-toggle">
+            <span>
+              <strong>显示大盘</strong>
+              <small>关闭后不再请求行情数据。</small>
+            </span>
+            <input id="marketEnabled" type="checkbox" checked />
+          </label>
+          <label class="preference-toggle market-toggle">
+            <span>
+              <strong>让牛对行情做反应</strong>
+              <small>Agent 状态始终优先，行情不会打断它。</small>
+            </span>
+            <input id="marketReactionsEnabled" type="checkbox" checked />
+          </label>
+          <fieldset class="market-sensitivity">
+            <legend>反应灵敏度</legend>
+            <div>
+              <label><input type="radio" name="marketThreshold" value="0.1" checked /><span>灵敏<small>0.1%</small></span></label>
+              <label><input type="radio" name="marketThreshold" value="0.5" /><span>标准<small>0.5%</small></span></label>
+              <label><input type="radio" name="marketThreshold" value="1" /><span>安静<small>1%</small></span></label>
+            </div>
+          </fieldset>
         </section>
         <div class="section-heading runtime-settings-heading">
           <div>

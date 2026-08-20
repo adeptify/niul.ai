@@ -19,9 +19,34 @@ test("upgrades the legacy scan interval without resetting user preferences", () 
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 5);
+  assert.equal(config.configVersion, 6);
   assert.equal(config.pollMs, 5000);
   assert.equal(config.cowScale, 1.35);
   assert.equal(config.bubbleScale, 0.9);
   assert.equal(config.soundEnabled, false);
+  assert.deepEqual(config.market, {
+    enabled: true,
+    provider: "eastmoney",
+    reactionsEnabled: true,
+    thresholdPct: 0.1,
+  });
+});
+
+test("merges partial market preferences with new defaults", () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "niulai-config-"));
+  fs.writeFileSync(
+    path.join(userDataDir, "config.json"),
+    JSON.stringify({
+      configVersion: 6,
+      market: { reactionsEnabled: false, thresholdPct: 0.5 },
+    })
+  );
+
+  const config = loadConfig(userDataDir);
+  assert.deepEqual(config.market, {
+    enabled: true,
+    provider: "eastmoney",
+    reactionsEnabled: false,
+    thresholdPct: 0.5,
+  });
 });

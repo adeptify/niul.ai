@@ -15,6 +15,9 @@ const path = require("path");
 const { loadConfig, saveConfig } = require("./config");
 const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
+const { EastmoneyIndexProvider } = require("./market/eastmoney-provider");
+const { MarketService } = require("./market/market-service");
+const { MarketReactionEngine } = require("./market/reactions");
 const {
   windowPositionForCursor,
   windowPositionForRectGrab,
@@ -30,6 +33,8 @@ let win;
 let tray;
 let config;
 let memoStore;
+let marketService;
+let marketReactionEngine;
 let memoTimer;
 let mouseGuardTimer;
 let scanWorker;
@@ -254,6 +259,8 @@ app.whenReady().then(() => {
   if (process.platform === "darwin") app.setActivationPolicy("accessory");
   config = loadConfig(app.getPath("userData"));
   memoStore = createMemoStore(path.join(app.getPath("userData"), "memos.json"));
+  marketService = new MarketService({ provider: new EastmoneyIndexProvider() });
+  marketReactionEngine = new MarketReactionEngine();
   createWindow();
   registerGlobalShortcut();
   memoTimer = setInterval(announceDueMemos, 15000);
@@ -279,9 +286,27 @@ app.whenReady().then(() => {
   }
 
   ipcMain.handle("scan", () => (windowDrag && lastSnapshot ? lastSnapshot : snapshot()));
+  ipcMain.handle("get-market-snapshot", async (_event, options = {}) => {
+    const marketConfig = config.market || {};
+    const marketSnapshot = await marketService.getSnapshot({
+      enabled: config.market?.enabled !== false,
+      force: Boolean(options.force),
+    });
+    const candidate = marketReactionEngine.process(marketSnapshot, {
+      thresholdPct: Number(marketConfig.thresholdPct || 0.1),
+    });
+    return {
+      ...marketSnapshot,
+      reaction: marketConfig.reactionsEnabled === false ? null : candidate,
+    };
+  });
   ipcMain.handle("get-config", () => config);
   ipcMain.handle("save-config", (_e, next) => {
+    const previousMarket = JSON.stringify(config.market || {});
     config = saveConfig(app.getPath("userData"), next);
+    if (previousMarket !== JSON.stringify(config.market || {})) {
+      marketReactionEngine = new MarketReactionEngine();
+    }
     registerGlobalShortcut();
     return config;
   });
