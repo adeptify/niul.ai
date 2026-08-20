@@ -5,11 +5,11 @@
 <h1 align="center">AI 开了一堆，谁在干活？让牛来帮你盯着。</h1>
 
 <p align="center">
-  一头住在 macOS 桌面上的小黄牛，替你看 Cursor、Claude Code、Codex、Grok Build 这些本地 AI。
+  一头住在 macOS 桌面上的小黄牛，替你看本地 AI 谁在干活，也顺便瞄一眼中、港、美大盘。
 </p>
 
 <p align="center">
-  它不写代码，只负责看谁在拉犁、谁在等你、谁又偷偷跑去吃草。
+  它不写代码，只负责看谁在拉犁、谁在等你、今天烧了多少 Token，以及大盘有没有动静。
 </p>
 
 <p align="center">
@@ -45,14 +45,14 @@
 
 ### 看一眼就全明白
 
-不知道每个 Agent 在跑什么？不知道它是在干活还是等你？不知道今天又烧了多少 token？
+不知道每个 Agent 在跑什么？不知道它是在干活还是等你？不知道今天又烧了多少 Token？懒得再开一个窗口看大盘？
 
-牛全知道，都写在头顶的气泡里。嫌乱，就只看还在干活的。
+牛全写在头顶的气泡里：Session 状态、Token 和 8 个主要指数。嫌乱，就只看还在干活的。
 
 <p align="center">
-  <img src="assets/niulai-session-overview.png" width="72%" alt="Niul.ai Session 状态、筛选与 Token 功能演示">
+  <img src="assets/niulai-session-overview.png" width="72%" alt="Niul.ai Session 状态、Token、筛选与中港美大盘功能演示">
   <br>
-  <sub>演示数据均为 Mock，不包含真实用户名、目录或 Token 记录。</sub>
+  <sub>Session、Token 与行情均为 Mock 演示数据，不包含真实用户名、目录或使用记录。</sub>
 </p>
 
 ### 点谁，就去找谁
@@ -73,9 +73,13 @@
 
 ### 顺便替你瞄一眼大盘
 
-展开气泡即可看到上证、深证、创业板、沪深300、恒生、标普500、纳指100和道琼斯。指数跨过设置的涨跌幅门槛时，牛会克制地说一句；Agent 完成或等你时仍然永远优先。
+展开气泡，就能直接看到上证、深证、创业板、沪深300、恒生、标普500、纳指100和道琼斯，不用自选，也不用再开一个行情窗口。
 
-第一期行情来自东方财富免 Key 接口，可能存在延迟。可以在设置里关闭大盘、关闭行情反应，或将灵敏度设为 `0.1%`、`0.5%`、`1%`。
+第一期行情来自东方财富免 Key 接口，可能存在延迟。指数跨过涨跌幅门槛时，牛会克制地说一句：
+
+> 今天风有点大，纳指100涨到 +0.5%。
+
+默认灵敏度是 `0.1%`，也可以改成 `0.5%` 或 `1%`；不想听它聊行情，就在设置里关闭反应或整个大盘。Agent 完成和等你始终优先，行情不会抢话。
 
 ### 一头牛不够，那就 Roll
 
@@ -115,7 +119,7 @@
 <details>
 <summary><b>English</b></summary>
 
-Niul.ai is a weirdly useful always-on-top macOS desktop pet. It watches local AI sessions across Cursor, Claude Code, Codex, Grok Build, and other runtimes, tells you who is working or waiting, focuses the right app when clicked, and keeps explicit local token usage local.
+Niul.ai is a weirdly useful always-on-top macOS desktop pet. It watches local AI sessions across Cursor, Claude Code, Codex, Grok Build, and other runtimes, shows explicit local token usage, and glances at eight major China, Hong Kong, and US indices through a no-key Eastmoney feed. Agent status always takes priority over market reactions.
 
 </details>
 

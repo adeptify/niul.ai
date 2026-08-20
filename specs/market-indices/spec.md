@@ -23,6 +23,7 @@
 6. 增加显示大盘、行情反应和灵敏度设置；默认门槛为 `0.1%`。
 7. 实现跨档触发、回滞、冷却、聚合与 Agent 优先级。
 8. 为 Provider、Service、反应规则和配置迁移补测试。
+9. README 的主功能截图与说明必须展示已发布的行情能力。
 
 ## 非目标
 
@@ -115,6 +116,7 @@ Renderer 不读取东财字段名，也不拼接第三方 URL。Provider 必须�
 - `electron/config.js`、`config/runtimes.default.json`：默认值和版本迁移。
 - `renderer/index.html`、`renderer/styles.css`、`renderer/app.js`：行情牌、设置和事件优先级接入。
 - `test/market-*.test.js`、`test/config.test.js`：核心行为验证。
+- `README.md`、`assets/niulai-session-overview.png`：公开功能说明与包含行情的 Mock 产品截图。
 
 ## 验收标准
 
@@ -126,12 +128,14 @@ Renderer 不读取东财字段名，也不拼接第三方 URL。Provider 必须�
 - [x] 设置保存后生效，旧配置自动获得安全默认值。
 - [x] `prefers-reduced-motion` 下不增加非必要动画。
 - [x] 全部自动测试通过，并完成真实东财响应和 Electron 界面检查。
+- [x] README 首屏功能说明和主截图可直接看到 8 个指数，并标明行情为 Mock 演示数据。
 
 ## 完成证据
 
 - `npm test`：39 项通过，0 失败。
 - 真实东财请求：一次返回 8 个预期指数，snapshot 状态为 `fresh`。
 - 浏览器 Preview（Electron 同一套 HTML/CSS）：720×960 下完成展开气泡、8 指数完整读数、设置滚动、禁用联动和指数聚焦播报检查。
+- README 产品图：使用同一 Renderer 的 Preview 数据生成 1024×1536 暗色截图，覆盖 8 指数、Token、筛选和 Session 列表。
 - Impeccable detector：0 条机械界面问题。
 - `npm run pack`：macOS arm64 应用打包成功，并从 `dist/mac-arm64/牛来.app` 正常启动。
 
