@@ -47,6 +47,12 @@ Cursor 开着。Claude Code 也开着。Codex 好像刚跑完，但你不确定�
 
 气泡里显示 Runtime、项目目录、活动状态、判定依据和今日 Token。支持按状态与 Runtime 筛选，默认只把正在拉犁的 Session 放到你眼前。
 
+<p align="center">
+  <img src="assets/niulai-session-overview.png" width="72%" alt="Niul.ai Session 状态、筛选与 Token 功能演示">
+  <br>
+  <sub>演示数据均为 Mock，不包含真实用户名、目录或 Token 记录。</sub>
+</p>
+
 ### 点谁，就去找谁
 
 点击 Session，直接唤起对应的 Runtime App。Codex 就打开 Codex，不会把项目名误当成 App，也不会把 Finder 文件夹丢到你脸上。
@@ -75,14 +81,22 @@ Cursor 开着。Claude Code 也开着。Codex 好像刚跑完，但你不确定�
   <img src="assets/niulai-football-v1.png" width="15%" alt="足球牛来">
 </p>
 
-## 一些没必要但不能没有的东西
+## ⚠️ 一些没必要，但不能没有的东西
 
 - 单击牛：展开或收起 Session
 - 双击牛：摸一下
 - 右键牛：快速记 Memo，可选 15 分钟、1 小时或明早提醒
 - `⌘⇧U`：随时召唤或隐藏
 - 状态变化：牛会带着一声「哞」碎嘴播报
-- 快速连点五下：**不建议在工作时间尝试**
+
+> [!CAUTION]
+> **不要连续点击这头牛五下。**
+>
+> 除非你真的想让它进入持续五分钟的「哞拉松」：每隔几秒抬头张嘴、认真报时，并继续哞。后悔了也可以再连点五下取消——前提是你还点得到它。
+
+<p align="center">
+  <img src="assets/niulai-moo-marathon.png" width="88%" alt="连续点击牛五下触发哞拉松彩蛋">
+</p>
 
 ## 本地优先
 
