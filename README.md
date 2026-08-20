@@ -2,6 +2,10 @@
   <img src="assets/niulai-product-logo-v1.png" width="120" height="120" alt="牛来">
 </p>
 
+<p align="center">
+  <a href="README.en.md">English</a> · <b>简体中文</b>
+</p>
+
 <h1 align="center">AI 开了一堆，谁在干活？让牛来帮你盯着。</h1>
 
 <p align="center">
@@ -116,12 +120,7 @@
 
 打开大盘时，牛来只会向行情 Provider 请求公开指数，不会带走 Session、目录、便签或 Token 数据。它只是看起来不太聪明。
 
-<details>
-<summary><b>English</b></summary>
-
-Niul.ai is a weirdly useful always-on-top macOS desktop pet. It watches local AI sessions across Cursor, Claude Code, Codex, Grok Build, and other runtimes, shows explicit local token usage, and glances at eight major China, Hong Kong, and US indices through a no-key Eastmoney feed. Agent status always takes priority over market reactions.
-
-</details>
+Looking for the full English version? Read the [English README](README.en.md).
 
 ---
 
