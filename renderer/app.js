@@ -1,3 +1,5 @@
+const { shouldIgnoreMouse } = window.niulMousePassthrough;
+
 const STATUS_TEXT = {
   working: "拉犁",
   waiting: "停犁",
@@ -1811,7 +1813,8 @@ function bindSettings() {
     closeMemoPanel();
     fillSettings(config);
     settings.showModal();
-    api.setIgnoreMouse(false);
+    syncInteractiveRegions();
+    syncMousePassthrough();
   });
   document.getElementById("closeSettings").addEventListener("click", closeSettings);
   document.getElementById("cancelSettings").addEventListener("click", closeSettings);
@@ -1847,6 +1850,8 @@ function bindSettings() {
   settings.addEventListener("close", () => {
     applyDisplayScale(config);
     setSettingsMessage("开启你常用的 Runtime，列表会更安静也更准确。");
+    syncInteractiveRegions();
+    syncMousePassthrough();
   });
 }
 
@@ -1891,11 +1896,12 @@ function syncInteractiveRegions() {
 
 function syncMousePassthrough() {
   cancelPassthroughLeave();
-  if (pointerDown || document.getElementById("settings")?.open) {
-    api.setIgnoreMouse(false);
-    return;
-  }
-  api.setIgnoreMouse(!isOverInteractiveSurface());
+  api.setIgnoreMouse(
+    shouldIgnoreMouse({
+      pointerActive: Boolean(pointerDown),
+      overInteractiveSurface: isOverInteractiveSurface(),
+    })
+  );
 }
 
 function armMousePassthrough() {
@@ -1912,8 +1918,7 @@ function armMousePassthrough() {
   const leave = () => {
     cancelPassthroughLeave();
     passthroughLeaveTimer = window.setTimeout(() => {
-      if (pointerDown || document.getElementById("settings").open) return;
-      api.setIgnoreMouse(true);
+      syncMousePassthrough();
     }, 80);
   };
   for (const element of interactive) {
