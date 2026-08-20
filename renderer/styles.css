@@ -1525,7 +1525,7 @@ textarea:focus-visible,
 
 #settings {
   width: 416px;
-  max-height: 620px;
+  max-height: min(760px, calc(100vh - 24px));
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -1546,7 +1546,7 @@ textarea:focus-visible,
 
 #settings form {
   display: grid;
-  max-height: 620px;
+  max-height: min(760px, calc(100vh - 24px));
   padding: 18px;
   overflow-y: auto;
 }
