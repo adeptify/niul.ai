@@ -81,7 +81,6 @@
           <span class="summary-item waiting"><i></i><b id="waitingCount">0</b><em>停犁</em></span>
           <span class="summary-item idle"><i></i><b id="idleCount">0</b><em>吃草</em></span>
           <span class="summary-item offline"><i></i><b id="offlineCount">0</b><em>回棚</em></span>
-          <span class="last-scan" id="lastScan">等待首次扫描</span>
         </div>
 
         <div class="bubble-body" id="bubbleBody">
@@ -100,7 +99,7 @@
           <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
             <span class="token-mark" aria-hidden="true">T</span>
             <span class="token-copy">
-              <span>今日 Token · 本机可核对</span>
+              <span>今日 Token</span>
               <strong id="todayTokens">—</strong>
             </span>
             <span class="token-sources" id="tokenSources">正在读取本机用量</span>
@@ -282,6 +281,7 @@
       </form>
     </dialog>
     <script src="mouse-passthrough.js"></script>
+    <script src="grass-alert.js"></script>
     <script src="moo.js"></script>
     <script src="app.js"></script>
   </body>

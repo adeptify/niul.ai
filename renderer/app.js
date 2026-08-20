@@ -1,4 +1,5 @@
 const { shouldIgnoreMouse } = window.niulMousePassthrough;
+const { createGrassAlertTracker } = window.niulGrassAlert;
 
 const STATUS_TEXT = {
   working: "拉犁",
@@ -15,10 +16,39 @@ const STATUS_HEADING = {
   all: "所有会话",
 };
 
+function waitWhyOf(row) {
+  return row && row.status === "waiting" ? row.waitWhy || "next" : "";
+}
+
+function sessionName(row) {
+  return row.cwdName || row.title || row.label || "这头";
+}
+
+function waitingCopy(row) {
+  const name = sessionName(row);
+  if (waitWhyOf(row) === "allow") return `${name} 停犁了，在等你点允许。`;
+  if (waitWhyOf(row) === "choose") return `${name} 停犁了，在等你选一下。`;
+  return `${name} 停犁了，正等你。`;
+}
+
+function rowStateText(row) {
+  const parts = [];
+  if (row.status === "waiting") {
+    if (waitWhyOf(row) === "allow") parts.push("停犁 · 等允许");
+    else if (waitWhyOf(row) === "choose") parts.push("停犁 · 等你选");
+    else parts.push(row.statusText || STATUS_TEXT.waiting);
+  } else {
+    parts.push(row.statusText || STATUS_TEXT[row.status] || row.status);
+  }
+  if (row.statusConfidence === "low") parts.push("看不太清");
+  if (row.subagentsWorking > 0) parts.push(`带着 ${row.subagentsWorking} 头小牛`);
+  return parts.join(" · ");
+}
+
 const STATUS_CHANGE = {
-  working: (row) => `${row.cwdName || row.title || row.label} 套上犁了。`,
-  waiting: (row) => `${row.cwdName || row.title || row.label} 停犁了，正等你。`,
-  idle: (row) => `${row.cwdName || row.title || row.label} 去吃草了。`,
+  working: (row) => `${sessionName(row)} 套上犁了。`,
+  waiting: waitingCopy,
+  idle: (row) => `${sessionName(row)} 去吃草了。`,
   offline: (row) => `${row.label} 回棚了。`,
 };
 
@@ -96,8 +126,11 @@ const COW_SKINS = [
 
 const MOOD_COPY = {
   working: (counts) => `${counts.working} 头在拉犁`,
-  waiting: (counts) =>
-    counts.waiting ? `${counts.waiting} 头停犁等你` : `${counts.idle} 头在吃草`,
+  waiting: (counts, rows = []) => {
+    const allow = rows.filter((row) => waitWhyOf(row) === "allow").length;
+    if (allow) return `${allow} 头停犁等你点允许`;
+    return counts.waiting ? `${counts.waiting} 头停犁等你` : `${counts.idle} 头在吃草`;
+  },
   offline: () => "牛棚里很安静",
 };
 
@@ -246,6 +279,9 @@ function previewApi() {
       return true;
     },
     focusSession: async () => true,
+    ackWaitingSession: noop,
+    completeWaitingNudge: noop,
+    setChatterEnabled: noop,
     setIgnoreMouse: noop,
     setInteractiveRegions: noop,
     startWindowDrag: noop,
@@ -303,6 +339,7 @@ let suppressClick = false;
 let memoReminder = "0";
 let hasInitialSnapshot = false;
 let chatterEnabled = localStorage.getItem("niulai.chatter") !== "false";
+const grassAlerts = createGrassAlertTracker(localStorage);
 let latestMarketSnapshot = null;
 let pendingMarketReaction = null;
 let priorityBusyUntil = 0;
@@ -679,13 +716,22 @@ function spokenText(message) {
   return /^哞/.test(text) ? text : `哞，${text}`;
 }
 
+function restingCowExpression() {
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  return stage?.classList.contains("is-observing-session") ||
+    pet?.classList.contains("is-wait-attention")
+    ? "attention"
+    : "base";
+}
+
 function stopSpeaking({ restore = true } = {}) {
   window.clearInterval(speakingTimer);
   window.clearTimeout(expressionTimer);
   const stage = document.getElementById("cowStage");
   stage?.classList.remove("is-speaking");
   if (restore && stage) {
-    setCowExpression(stage.classList.contains("is-observing-session") ? "attention" : "base");
+    setCowExpression(restingCowExpression());
   }
   scheduleBlink();
 }
@@ -720,10 +766,11 @@ function scheduleBlink() {
     if (
       currentSkin().expressions?.blink &&
       !stage.classList.contains("is-speaking") &&
-      !stage.classList.contains("is-observing-session")
+      !stage.classList.contains("is-observing-session") &&
+      !document.getElementById("pet")?.classList.contains("is-wait-attention")
     ) {
       await setCowExpression("blink");
-      window.setTimeout(() => setCowExpression("base"), 135);
+      window.setTimeout(() => setCowExpression(restingCowExpression()), 135);
     }
     scheduleBlink();
   }, 4200 + Math.random() * 3600);
@@ -739,6 +786,7 @@ function scheduleAmbientMotion(delay = 3200 + Math.random() * 2800) {
       !stage ||
       document.hidden ||
       pointerDown ||
+      document.getElementById("pet")?.classList.contains("is-wait-attention") ||
       stage.matches(
         ".is-speaking, .is-observing-session, .is-state-changing, .is-petted, .is-rolling, .is-dragging"
       );
@@ -878,14 +926,13 @@ async function saveQuickMemo() {
 }
 
 function renderSummary(snapshot) {
-  const { counts, scannedAt } = snapshot;
+  const { counts } = snapshot;
   document.getElementById("workingCount").textContent = counts.working || 0;
   document.getElementById("waitingCount").textContent = counts.waiting || 0;
   document.getElementById("idleCount").textContent = counts.idle || 0;
   document.getElementById("offlineCount").textContent = counts.offline || 0;
-  document.getElementById("lastScan").textContent = `${timeAgo(scannedAt)}扫描`;
   document.getElementById("statusLine").textContent =
-    (MOOD_COPY[snapshot.mood] || MOOD_COPY.waiting)(counts);
+    (MOOD_COPY[snapshot.mood] || MOOD_COPY.waiting)(counts, snapshot.rows || []);
 }
 
 function renderTokenUsage(snapshot) {
@@ -896,19 +943,33 @@ function renderTokenUsage(snapshot) {
     (source) => source.tokens > 0 && source.confidence === "partial"
   );
   total.textContent = `${hasPartial ? "≥" : ""}${formatTokens(usage.tokens)}`;
-  sources.textContent = usage.sources?.length
-    ? usage.sources
-        .map((source) => {
-          if (!source.tokens && source.confidence === "estimated") {
-            return `${source.label} 旧日志≈${formatTokens(source.estimatedTokens)}（未计）`;
-          }
-          const exact = `${source.label} ${source.confidence === "partial" ? "≥" : ""}${formatTokens(source.tokens)}`;
-          return source.estimatedTokens ? `${exact} · 另有旧日志估算未计` : exact;
-        })
-        .join(" · ")
-    : "Codex、Claude、Grok、Gemini 暂无今日记录";
-  document.getElementById("tokenStrip").title =
-    "总数只读取可核对的本机 usage：Codex、Claude Code、新版 Grok Build、Gemini CLI。旧版 Grok 上下文快照单独标为估算且不计入总数；Cursor 不估算。";
+  const details = usage.sources?.length
+    ? usage.sources.map((source) => {
+        if (!source.tokens && source.confidence === "estimated") {
+          return `${source.label} 旧日志≈${formatTokens(source.estimatedTokens)}（未计）`;
+        }
+        const exact = `${source.label} 今日 ${source.confidence === "partial" ? "≥" : ""}${formatTokens(source.tokens)}`;
+        return source.estimatedTokens ? `${exact} · 另有旧日志估算未计` : exact;
+      })
+    : [];
+  const rateLimit = usage.rateLimit || usage.sources?.find((source) => source.id === "codex")?.rateLimit;
+  const hasRateLimit = Boolean(
+    rateLimit &&
+      Number.isFinite(Number(rateLimit.remainingPercent)) &&
+    Number(rateLimit.resetsAt) > Date.now()
+  );
+  sources.textContent = hasRateLimit
+    ? `Codex 还剩 ${rateLimit.remainingPercent}%`
+    : details.length
+      ? "本机日志用量已汇总"
+      : "暂无今日记录";
+  const tooltip = [`今日总计 ${hasPartial ? "≥" : ""}${formatTokens(usage.tokens)}`, ...details];
+  if (hasRateLimit) {
+    tooltip.push(
+      `Codex 配额还剩 ${rateLimit.remainingPercent}%（${new Date(rateLimit.resetsAt).toLocaleString()} 重置）`
+    );
+  }
+  document.getElementById("tokenStrip").title = tooltip.join(" · ");
 }
 
 function renderRuntimeFilters(rows) {
@@ -995,7 +1056,18 @@ function renderSessionRows(snapshot) {
           </div>
         </div>
       </li>`
-      : `
+      : snapshot.onlineMissing?.length
+        ? `
+      <li class="empty-state">
+        <div>
+          <strong>暂时没发现 Session</strong>
+          <span>${snapshot.onlineMissing.map((item) => item.label).join("、")} 开着，但我没看见 Session。点齿轮看看路径？</span>
+          <div class="empty-actions">
+            <button type="button" class="empty-action" data-empty-action="open-settings">打开设置</button>
+          </div>
+        </div>
+      </li>`
+        : `
       <li class="empty-state">
         <div>
           <strong>暂时没发现 Session</strong>
@@ -1013,7 +1085,7 @@ function renderSessionRows(snapshot) {
     .map((row) => {
       const displayName = row.cwdName || row.title || row.label || "未命名 Session";
       const detail = row.cwd || row.file || "未记录工作目录";
-      const stateText = row.statusText || STATUS_TEXT[row.status] || row.status;
+      const stateText = rowStateText(row);
       const stateReason = row.statusReason || stateText;
       const tokenText =
         row.tokensToday > 0
@@ -1076,6 +1148,9 @@ function renderList(snapshot) {
       row.status,
       row.statusText,
       row.statusReason,
+      row.statusConfidence,
+      row.waitWhy,
+      row.subagentsWorking,
       row.activityAt,
       row.mtime,
       row.cwd,
@@ -1105,6 +1180,7 @@ async function openSession(id, element) {
   if (!row) return;
   element.classList.add("is-opening");
   showCaption(`打开 ${row.label}。`);
+  if (typeof api.ackWaitingSession === "function") api.ackWaitingSession(String(row.id));
   try {
     const opened = await api.focusSession(row);
     if (!opened) throw new Error("no target");
@@ -1135,7 +1211,11 @@ function pointCowAt(element) {
     setCowExpression("turning");
     attentionTimer = window.setTimeout(() => {
       if (stage.dataset.observingId !== observedId) return;
-      showCaption(`${row.label} · ${row.statusText || STATUS_TEXT[row.status] || row.status}`, 0, {
+      const line =
+        row.statusConfidence === "low"
+          ? `这头 ${row.label} 我看不太清。`
+          : `${row.label} · ${rowStateText(row)}`;
+      showCaption(line, 0, {
         attention: true,
         speechDuration: 900,
       });
@@ -1196,11 +1276,18 @@ function stopCowPointing() {
 
 function announceStatusChanges(previousRows, nextRows) {
   if (!hasInitialSnapshot || !chatterEnabled) return false;
-  const previous = new Map(previousRows.map((row) => [String(row.id), row.status]));
+  const previous = new Map(
+    previousRows.map((row) => [String(row.id), `${row.status}:${waitWhyOf(row)}`])
+  );
   const priority = { working: 0, waiting: 1, idle: 2, offline: 3 };
+  const whyRank = { allow: 0, choose: 1, next: 2 };
   const changes = nextRows
-    .filter((row) => previous.has(String(row.id)) && previous.get(String(row.id)) !== row.status)
-    .sort((a, b) => (priority[a.status] ?? 9) - (priority[b.status] ?? 9));
+    .filter((row) => previous.has(String(row.id)) && previous.get(String(row.id)) !== `${row.status}:${waitWhyOf(row)}`)
+    .sort((a, b) => {
+      const statusDelta = (priority[a.status] ?? 9) - (priority[b.status] ?? 9);
+      if (statusDelta) return statusDelta;
+      return (whyRank[waitWhyOf(a)] ?? 9) - (whyRank[waitWhyOf(b)] ?? 9);
+    });
   if (!changes.length) return false;
   const row = changes[0];
   const copy = STATUS_CHANGE[row.status];
@@ -1210,8 +1297,53 @@ function announceStatusChanges(previousRows, nextRows) {
     "is-market-reacting-down"
   );
   markPriorityBusy(4200);
-  showCaption(`${copy ? copy(row) : `${row.cwdName || row.title || row.label} 状态变了。`}${suffix}`, 4200);
+  showCaption(`${copy ? copy(row) : `${sessionName(row)} 状态变了。`}${suffix}`, 4200, {
+    attention: waitWhyOf(row) === "allow" || waitWhyOf(row) === "choose",
+  });
   return true;
+}
+
+function announceWaitingReminder(reminder, blocked) {
+  if (!reminder?.id) return false;
+  if (blocked || !chatterEnabled) {
+    if (typeof api.completeWaitingNudge === "function") {
+      api.completeWaitingNudge(reminder.id, false);
+    }
+    return false;
+  }
+  markPriorityBusy(4200);
+  showCaption(reminder.text, 4200, { attention: true });
+  if (typeof api.completeWaitingNudge === "function") {
+    api.completeWaitingNudge(reminder.id, true);
+  }
+  return true;
+}
+
+async function announceGrass(snapshot, now, blocked) {
+  if (blocked || !chatterEnabled) return false;
+  const rateLimit =
+    snapshot.tokenUsage?.rateLimit ||
+    snapshot.tokenUsage?.sources?.find((source) => source.id === "codex")?.rateLimit;
+  const alert = grassAlerts.candidate(rateLimit, now);
+  if (!alert) return false;
+  const urgentWait = (snapshot.rows || []).some(
+    (row) => waitWhyOf(row) === "allow" || waitWhyOf(row) === "choose"
+  );
+  if (urgentWait || snapshot.mood === "working") return false;
+  grassAlerts.commit(alert.key);
+  markPriorityBusy(3600);
+  showCaption(alert.text, 3600);
+  return true;
+}
+
+function syncWaitAttention(rows) {
+  const pet = document.getElementById("pet");
+  const urgent = (rows || []).some((row) => waitWhyOf(row) === "allow" || waitWhyOf(row) === "choose");
+  pet?.classList.toggle("is-wait-attention", urgent);
+  const stage = document.getElementById("cowStage");
+  if (!stage?.classList.contains("is-speaking")) {
+    setCowExpression(restingCowExpression());
+  }
 }
 
 async function tick() {
@@ -1223,15 +1355,18 @@ async function tick() {
   try {
     const snapshot = await api.scan();
     const previousRows = latestRows;
+    const now = Date.now();
     renderList(snapshot);
     await setCow(snapshot.mood);
-    announceStatusChanges(previousRows, snapshot.rows);
-    maybeShowFirstRunHint(snapshot);
+    syncWaitAttention(snapshot.rows || []);
+    const statusSpoke = announceStatusChanges(previousRows, snapshot.rows || []);
+    const nudgeSpoke = announceWaitingReminder(snapshot.waitingReminder, statusSpoke);
+    await announceGrass(snapshot, now, statusSpoke || nudgeSpoke);
+    if (!statusSpoke && !nudgeSpoke) maybeShowFirstRunHint(snapshot);
     hasInitialSnapshot = true;
     beacon.title = "扫描正常";
   } catch (error) {
     document.getElementById("statusLine").textContent = "扫描暂时失败";
-    document.getElementById("lastScan").textContent = "等待重试";
     beacon.title = "扫描失败";
     showToast(`扫描失败：${error.message || error}`);
   } finally {
@@ -1366,6 +1501,7 @@ function syncChatterMenu() {
 function setChatterEnabled(enabled) {
   chatterEnabled = Boolean(enabled);
   localStorage.setItem("niulai.chatter", String(chatterEnabled));
+  if (typeof api.setChatterEnabled === "function") api.setChatterEnabled(chatterEnabled);
   syncChatterMenu();
   if (!chatterEnabled && mooMarathonEndsAt) stopMooMarathon(false);
   if (!chatterEnabled) pendingMarketReaction = null;
@@ -2031,6 +2167,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const collapsed = localStorage.getItem("niulai.bubbleCollapsed") === "true";
   setBubbleCollapsed(collapsed, { silent: true });
   syncChatterMenu();
+  if (typeof api.setChatterEnabled === "function") api.setChatterEnabled(chatterEnabled);
   bindCowInteraction();
   bindMemo();
   bindSettings();

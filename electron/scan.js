@@ -195,14 +195,192 @@ function messageParts(record) {
   return Array.isArray(content) ? content : [];
 }
 
-function activity(status, reason, activityAt, confidence = "medium", label) {
+const CHOOSE_TOOL = /askuserquestion|askfollowupquestion|askquestion|ask_user/i;
+const ALLOW_REQUEST_EVENT =
+  /(?:^|_)(?:approval_request|permission_request|request_permission|permission_requested)$/i;
+const ALLOW_RESOLUTION_EVENT =
+  /(?:^|_)(?:approval_(?:response|resolved|granted|denied)|permission_(?:response|resolved|granted|denied)|request_permission_(?:response|resolved|granted|denied))$/i;
+const EDIT_TOOL = /^(edit|write|applypatch|strreplace|update)$/i;
+const READ_TOOL = /^(read|readfile|grep|glob|webfetch|websearch)$/i;
+const RUN_TOOL = /^(bash|shell|exec)$/i;
+const TEST_CMD = /\b(test|spec|pytest|vitest|jest|npm test|cargo test)\b/i;
+
+function activity(status, reason, activityAt, confidence = "medium", label, extras = {}) {
   return {
     status,
     label: label || STATUS_LABEL[status] || status,
     reason,
     activityAt: activityAt || 0,
     confidence,
+    waitWhy: extras.waitWhy || (status === "waiting" ? "next" : ""),
+    activityLine: extras.activityLine || "",
   };
+}
+
+function toolInputObject(input) {
+  if (!input) return {};
+  if (typeof input === "object") return input;
+  if (typeof input !== "string") return {};
+  try {
+    const parsed = JSON.parse(input);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function toolFileName(input) {
+  const obj = toolInputObject(input);
+  const value =
+    obj.path || obj.file_path || obj.filePath || obj.target_file || obj.file || "";
+  if (typeof value === "string" && value.trim()) return path.basename(value.trim());
+  if (typeof input === "string") {
+    const quoted = input.match(/['"`]([^'"`]+\.[A-Za-z0-9]+)['"`]/);
+    if (quoted) return path.basename(quoted[1]);
+  }
+  return "";
+}
+
+function toolCommand(input) {
+  const obj = toolInputObject(input);
+  if (typeof obj.command === "string") return obj.command;
+  if (typeof obj.cmd === "string") return obj.cmd;
+  return typeof input === "string" ? input : "";
+}
+
+function describeToolActivity(tool) {
+  if (!tool || !tool.name) return "";
+  const name = String(tool.name);
+  const file = toolFileName(tool.input);
+  if (EDIT_TOOL.test(name) && file) return `正在改 ${file}`;
+  if (READ_TOOL.test(name) && file) return `正在翻 ${file}`;
+  if (RUN_TOOL.test(name)) {
+    if (TEST_CMD.test(toolCommand(tool.input))) return "正在跑测试";
+    return "";
+  }
+  if (file && /edit|write|patch/i.test(name)) return `正在改 ${file}`;
+  if (file && /read|grep|glob|fetch/i.test(name)) return `正在翻 ${file}`;
+  return "";
+}
+
+function isNewUserTurn(record) {
+  const role = record && (record.role || record.type);
+  if (role !== "user") return false;
+  return !messageParts(record).some((part) => part && part.type === "tool_result");
+}
+
+function currentTurnRecords(records) {
+  let start = 0;
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    const payload = record && record.payload && typeof record.payload === "object" ? record.payload : {};
+    const payloadType = String(payload.type || "");
+    const closesTurn =
+      record?.type === "turn_ended" ||
+      payloadType === "task_complete" ||
+      payloadType === "turn_aborted" ||
+      record?.type === "last-prompt";
+    const startsTurn = payloadType === "task_started" || isNewUserTurn(record);
+    if (closesTurn) start = index + 1;
+    else if (startsTurn) start = index;
+  }
+  return records.slice(start);
+}
+
+function lastOpenTool(records) {
+  const answered = new Set();
+  const resolvedApprovals = new Set();
+  let approvalResolutionCount = 0;
+  const turnRecords = currentTurnRecords(records);
+  for (let index = turnRecords.length - 1; index >= 0; index -= 1) {
+    const record = turnRecords[index];
+    const payload = record && record.payload && typeof record.payload === "object" ? record.payload : {};
+    const payloadType = String(payload.type || "");
+    if (payloadType === "function_call_output" || payloadType === "custom_tool_call_output") {
+      answered.add(payload.call_id || payload.id);
+    }
+    for (const part of messageParts(record)) {
+      if (part && part.type === "tool_result") answered.add(part.tool_use_id || part.id);
+    }
+    if (record?.type === "event_msg" && ALLOW_RESOLUTION_EVENT.test(payloadType)) {
+      const approvalId = payload.call_id || payload.id || payload.request_id;
+      if (approvalId) resolvedApprovals.add(approvalId);
+      approvalResolutionCount += 1;
+      continue;
+    }
+    if (record?.type === "event_msg" && ALLOW_REQUEST_EVENT.test(payloadType)) {
+      const approvalId = payload.call_id || payload.id || payload.request_id;
+      if (approvalId && resolvedApprovals.has(approvalId)) {
+        resolvedApprovals.delete(approvalId);
+        approvalResolutionCount = Math.max(0, approvalResolutionCount - 1);
+        continue;
+      }
+      if (approvalResolutionCount > 0) {
+        approvalResolutionCount -= 1;
+        continue;
+      }
+      return { name: payloadType, input: payload, approval: true };
+    }
+    for (const part of messageParts(record)) {
+      if (part && part.type === "tool_use" && part.name && !answered.has(part.id)) {
+        return { name: part.name, input: part.input, id: part.id };
+      }
+    }
+    if (
+      record &&
+      record.type === "response_item" &&
+      (payloadType === "function_call" || payloadType === "custom_tool_call") &&
+      payload.name &&
+      !answered.has(payload.call_id || payload.id)
+    ) {
+      return {
+        name: payload.name,
+        input: payload.input || payload.arguments,
+        id: payload.call_id || payload.id,
+      };
+    }
+  }
+  return null;
+}
+
+function lastToolUse(records) {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    const payload = record && record.payload && typeof record.payload === "object" ? record.payload : {};
+    for (const part of messageParts(record)) {
+      if (part && part.type === "tool_use" && part.name) {
+        return { name: part.name, input: part.input };
+      }
+    }
+    if (
+      record &&
+      record.type === "response_item" &&
+      (payload.type === "function_call" || payload.type === "custom_tool_call") &&
+      payload.name
+    ) {
+      return { name: payload.name, input: payload.input || payload.arguments };
+    }
+  }
+  return null;
+}
+
+function decorateActivity(state, records, mtime) {
+  const openTool = lastOpenTool(records);
+  if (openTool && CHOOSE_TOOL.test(openTool.name || "")) {
+    return activity("waiting", "Agent 在等你选一下", mtime, "high", "停犁", { waitWhy: "choose" });
+  }
+  if (openTool?.approval) {
+    return activity("waiting", "Agent 在等你点允许", mtime, "high", "停犁", { waitWhy: "allow" });
+  }
+  if (state.status === "waiting" && !state.waitWhy) state.waitWhy = "next";
+  if (state.status === "working") {
+    const line = describeToolActivity(openTool || lastToolUse(records));
+    if (line) {
+      state.label = line;
+      state.activityLine = line;
+    }
+  }
+  return state;
 }
 
 function classify({ mtime, online, now, workingWindowMs }) {
@@ -225,6 +403,7 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
   const records = readJsonlTail(file);
   if (!records.length) return classify({ mtime, online, now, workingWindowMs });
 
+  let state = null;
   if (runtime === "codex") {
     let lifecycle = "";
     let lifecycleIndex = -1;
@@ -236,23 +415,23 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
       }
     });
     if (lifecycle === "task_started" && age <= pendingTurnMs) {
-      return activity("working", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
-    }
-    if ((lifecycle === "task_complete" || lifecycle === "turn_aborted") && age <= recentSessionMs) {
-      return activity("waiting", "Codex 已完成最近一轮", mtime, "high");
-    }
-    const afterLifecycle = records.slice(lifecycleIndex + 1);
-    if (
-      age <= pendingTurnMs &&
-      afterLifecycle.some(
-        (record) =>
-          record.type === "response_item" &&
-          ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(
-            record.payload && record.payload.type
-          )
-      )
-    ) {
-      return activity("working", "Codex 最近事件是工具调用", mtime, "high", "出力");
+      state = activity("working", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
+    } else if ((lifecycle === "task_complete" || lifecycle === "turn_aborted") && age <= recentSessionMs) {
+      state = activity("waiting", "Codex 已完成最近一轮", mtime, "high");
+    } else {
+      const afterLifecycle = records.slice(lifecycleIndex + 1);
+      if (
+        age <= pendingTurnMs &&
+        afterLifecycle.some(
+          (record) =>
+            record.type === "response_item" &&
+            ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(
+              record.payload && record.payload.type
+            )
+        )
+      ) {
+        state = activity("working", "Codex 最近事件是工具调用", mtime, "high", "出力");
+      }
     }
   }
 
@@ -265,46 +444,50 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
   const hasText = partTypes.includes("text");
   const role = last.role || last.type;
 
-  if (runtime === "cursor") {
+  if (!state && runtime === "cursor") {
     if (last.type === "turn_ended" && age <= recentSessionMs) {
-      return activity("waiting", "Cursor 已完成最近一轮", mtime, "high");
-    }
-    if (age <= pendingTurnMs && (hasToolUse || hasToolResult)) {
-      return activity("working", "Cursor turn 尚未结束", mtime, "high", hasToolUse ? "出力" : undefined);
-    }
-    if (age <= pendingTurnMs && role === "user") {
-      return activity("working", "收到用户消息，尚未记录 turn 结束", mtime, "high");
-    }
-    if (age <= recentSessionMs && role === "assistant" && hasText && !hasToolUse) {
-      return activity("waiting", "Cursor 最近一轮已给出回复", mtime, "medium");
+      state = activity("waiting", "Cursor 已完成最近一轮", mtime, "high");
+    } else if (age <= pendingTurnMs && (hasToolUse || hasToolResult)) {
+      state = activity("working", "Cursor turn 尚未结束", mtime, "high", hasToolUse ? "出力" : undefined);
+    } else if (age <= pendingTurnMs && role === "user") {
+      state = activity("working", "收到用户消息，尚未记录 turn 结束", mtime, "high");
+    } else if (age <= recentSessionMs && role === "assistant" && hasText && !hasToolUse) {
+      state = activity("waiting", "Cursor 最近一轮已给出回复", mtime, "medium");
     }
   }
 
-  if (runtime === "claude-code" || runtime === "claude-desktop") {
+  if (!state && (runtime === "claude-code" || runtime === "claude-desktop")) {
     if (age <= pendingTurnMs && (hasToolUse || hasToolResult || hasThinking)) {
-      return activity(
+      state = activity(
         "working",
         "Claude 最近事件仍在一个执行链中",
         mtime,
         "high",
         hasToolUse ? "出力" : hasThinking ? "低头" : undefined
       );
-    }
-    if (age <= pendingTurnMs && last.type === "user") {
-      return activity("working", "Claude 已收到新消息", mtime, "medium");
-    }
-    if (age <= recentSessionMs && (last.type === "last-prompt" || (last.type === "assistant" && hasText))) {
-      return activity("waiting", "Claude 最近一轮已完成", mtime, "medium");
+    } else if (age <= pendingTurnMs && last.type === "user") {
+      state = activity("working", "Claude 已收到新消息", mtime, "medium");
+    } else if (age <= recentSessionMs && (last.type === "last-prompt" || (last.type === "assistant" && hasText))) {
+      state = activity("waiting", "Claude 最近一轮已完成", mtime, "medium");
     }
   }
 
-  if (age <= workingWindowMs) {
-    return activity("working", `${runtime} Session 数据刚刚更新`, mtime, "medium");
+  if (!state) {
+    if (age <= workingWindowMs) {
+      state = activity("working", `${runtime} Session 数据刚刚更新`, mtime, "medium");
+    } else if (age <= recentSessionMs) {
+      state = activity("waiting", "最近使用过，当前没有执行事件", mtime, "low");
+    } else {
+      state = activity("idle", IDLE_STOPPED, mtime, "medium");
+    }
   }
-  if (age <= recentSessionMs) {
-    return activity("waiting", "最近使用过，当前没有执行事件", mtime, "low");
-  }
-  return activity("idle", IDLE_STOPPED, mtime, "medium");
+  return decorateActivity(state, records, mtime);
+}
+
+function countWorkingSubagents(activityStates, parentFile) {
+  return activityStates.filter(
+    ({ file, state }) => file !== parentFile && state?.status === "working"
+  ).length;
 }
 
 function session({
@@ -319,8 +502,10 @@ function session({
   workingWindowMs,
   title,
   activityHint,
+  subagentsWorking,
 }) {
   const state = activityHint || classify({ mtime, online, now, workingWindowMs });
+  const waitWhy = state.status === "waiting" ? state.waitWhy || "next" : "";
   return {
     id: `${runtime}:${id}`,
     runtime,
@@ -335,6 +520,8 @@ function session({
     statusConfidence: state.confidence,
     activityAt: state.activityAt || mtime || 0,
     title: title || "",
+    waitWhy,
+    subagentsWorking: Number(subagentsWorking) || 0,
   };
 }
 
@@ -400,6 +587,7 @@ function detectCursor({ now, workingWindowMs, procs, cfg }) {
       const newestState = activityStates[0];
       const selected = workingState || newestState;
       const mtime = newestState ? newestState.mtime : statMtime(jsonl);
+      const subagentsWorking = countWorkingSubagents(activityStates, jsonl);
       out.push(
         session({
           runtime: "cursor",
@@ -412,6 +600,7 @@ function detectCursor({ now, workingWindowMs, procs, cfg }) {
           now,
           workingWindowMs,
           activityHint: selected && selected.state,
+          subagentsWorking,
         })
       );
     }
@@ -975,6 +1164,7 @@ function scan(config) {
         (sum, source) => sum + Number(source.estimatedTokens || 0),
         0
       ),
+      rateLimit: sources.find((source) => source.id === "codex")?.rateLimit || null,
     };
     rows = rows.map((row) => ({
       ...row,
@@ -987,8 +1177,17 @@ function scan(config) {
 
   const counts = { working: 0, waiting: 0, idle: 0, offline: 0 };
   for (const row of rows) counts[row.status] = (counts[row.status] || 0) + 1;
+  const present = new Set(rows.map((row) => row.runtime));
+  const onlineMissing = [];
+  for (const [id, runtimeCfg] of Object.entries(config.runtimes || {})) {
+    if (!runtimeCfg || runtimeCfg.enabled === false) continue;
+    if (present.has(id)) continue;
+    if (isOnline(procs, runtimeCfg.process || [])) {
+      onlineMissing.push({ id, label: runtimeCfg.label || id });
+    }
+  }
   const mood = counts.working > 0 ? "working" : counts.waiting + counts.idle > 0 ? "waiting" : "offline";
-  return { rows, counts, mood, tokenUsage, scannedAt: now };
+  return { rows, counts, mood, tokenUsage, onlineMissing, scannedAt: now };
 }
 
 if (require.main === module) {
@@ -996,4 +1195,12 @@ if (require.main === module) {
   console.log(JSON.stringify(scan(loadConfig()), null, 2));
 }
 
-module.exports = { scan, snapshotProcesses, isOnline, inferJsonlActivity };
+module.exports = {
+  scan,
+  snapshotProcesses,
+  isOnline,
+  inferJsonlActivity,
+  countWorkingSubagents,
+  describeToolActivity,
+  lastOpenTool,
+};

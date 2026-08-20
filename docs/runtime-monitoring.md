@@ -10,26 +10,28 @@ This document is the executable monitoring plan: where sessions live, how to cla
 
 ## 1. 事件优先、时间回退 / Events first, timestamps second
 
-轮询默认 2.5s。先拍一张 `ps -axo pid=,comm=,args=`，再扫各家 Session。不能用统一的 `mtime` 规则判断所有 Runtime：Cursor、Claude、Codex 的 JSONL 与 Grok Build 的 `active_sessions.json` 都有可解释 turn 生命周期的事件，优先读这些事件；只有没有稳定事件合同的 Runtime 才退回 90s 热写入窗口（`workingWindowMs`）。
+轮询默认 5s。先拍一张 `ps -axo pid=,comm=,args=`，再扫各家 Session。不能用统一的 `mtime` 规则判断所有 Runtime：Cursor、Claude、Codex 的 JSONL 与 Grok Build 的 `active_sessions.json` 都有可解释 turn 生命周期的事件，优先读这些事件；只有没有稳定事件合同的 Runtime 才退回 90s 热写入窗口（`workingWindowMs`）。
 
-Poll every 2.5s. Take one process snapshot, then inspect each store. Cursor, Claude, and Codex use their turn events; runtimes without a stable event contract fall back to a 90s hot-write window (`workingWindowMs`).
+Poll every 5s. Take one process snapshot, then inspect each store. Cursor, Claude, and Codex use their turn events; runtimes without a stable event contract fall back to a 90s hot-write window (`workingWindowMs`).
 
 | 状态 / State | 判定 / Rule |
 | --- | --- |
 | 工作中 / working | Runtime 进程在，且最后事件表明 turn 未结束；或 Session 文件处于热写入窗口 |
-| 等你 / waiting | 最近 Session 有明确完成事件，或最近回复已结束，正在等待用户 |
+| 等你 / waiting | 最近 Session 有明确完成事件，或最近回复已结束，正在等待用户。`waitWhy` 仅为 `next` / `choose` / `allow`；无铁证不标 `allow`。未完成的普通 `tool_use`（如 Edit/Bash）仍是工作中，不得当成等允许。 |
 | 闲置 / idle | 进程在，但这条 Session 已超过近期窗口且没有未完成 turn |
 | 不在线 / offline | 进程不在。默认只展示 `mtime` 仍在 `maxOfflineAgeMs`（3 天）内的条目 |
 
-每一行同时返回 `statusText`、`statusReason`、`statusConfidence` 和 `activityAt`。界面展示可读状态，悬停可看判定依据。Session 主文件只用于打开与定位；Cursor 子代理 JSONL 会作为父 Session 的活动证据，但不会额外生成十几条列表项。
+每一行同时返回 `statusText`、`statusReason`、`statusConfidence`、`waitWhy`、`subagentsWorking` 和 `activityAt`。`statusConfidence === "low"` 时界面说「看不太清」，不得假装很准。当前一轮未回答的 `AskUserQuestion` 等提问工具标 `waitWhy=choose`；当前一轮里尚未解决的 approval / permission request 才标 `allow`。完成、终止、新一轮开始或明确 resolution 后，不再沿用旧等待理由。工作中若能从工具入参读到文件名，`statusText` 用「正在改 / 正在翻 {basename}」，不暴露工具名或 diff。Cursor 子代理 JSONL 会作为父 Session 的活动证据，父行可显示「带着 N 头小牛」（N 只计此刻仍 working 的子文件），但不会额外生成十几条列表项。
 
 明确的“turn 未结束”事件最多保留 6 小时，覆盖长工具调用和长时间推理；超过后回落为闲置，避免 Runtime 崩溃留下永久“工作中”。
 
+停犁二次提醒由 Electron 主进程维护：窗口显示时把牛话发给 renderer，窗口隐藏时继续低频扫描并发送系统通知。同一轮 waiting 最多提醒一次；`waitWhy` 变化不会重置已点击或已提醒状态，离开 waiting 后才开始新一轮。
+
 ### 今日 Token / Today's tokens
 
-统计口径参考 [TokenStep](https://github.com/Backtthefuture/TokenStep) 与 [CC-Switch](https://github.com/farion1231/cc-switch) 的 Session usage importer：只读取本机日志里明确的 usage 元数据，不按 prompt、代码或回复字数估算。结果缓存 30 秒，避免 2.5 秒 Session 轮询反复扫描大日志。所有事件按本地 `[今日 00:00, 明日 00:00)` 归属；`mtime` / `ctime` 只用于筛出今天实际改动过、需要重读的候选文件，不参与 Token 的日期归属。
+统计口径参考 [TokenStep](https://github.com/Backtthefuture/TokenStep) 与 [CC-Switch](https://github.com/farion1231/cc-switch) 的 Session usage importer：只读取本机日志里明确的 usage 元数据，不按 prompt、代码或回复字数估算。结果缓存 30 秒，避免 5 秒 Session 轮询反复扫描大日志。所有事件按本地 `[今日 00:00, 明日 00:00)` 归属；`mtime` / `ctime` 只用于筛出今天实际改动过、需要重读的候选文件，不参与 Token 的日期归属。
 
-- **Codex**：同时读取 `$CODEX_HOME/sessions` 与 `archived_sessions`。`token_count.last_token_usage` 作为单次请求精确值；旧日志缺少它时，对 `total_token_usage` 的 input / output 分量做 high-water 增量。活动、归档与 fork/resume 重放的同时间戳同 payload 事件跨文件只计一次。
+- **Codex**：同时读取 `$CODEX_HOME/sessions` 与 `archived_sessions`。`token_count.last_token_usage` 作为单次请求精确值；旧日志缺少它时，对 `total_token_usage` 的 input / output 分量做 high-water 增量。活动、归档与 fork/resume 重放的同时间戳同 payload 事件跨文件只计一次。最近日志中的有效 `rate_limits.primary`（`used_percent` / `window_minutes` / `resets_at`）用于 Token 条展示「Codex 还剩 N%」；窗口读取与日历日 Token 解耦，只接受当前未过期的本机字段，不估 Claude 5 小时，不为此联网。
 - **Claude Code**：读取 `$CLAUDE_CONFIG_DIR/projects/**/*.jsonl` 的 assistant `message.usage`，在整个收集周期内按 `message.id` 跨文件去重，优先保留带 `stop_reason` 的最终块，再合计 input、cache creation、cache read 与 output。
 - **Grok Build**：同时读取 `$GROK_HOME/sessions` 与 `archived_sessions`，只把 `turn_completed.usage.modelUsage` 的逐轮明确值计入总数，并按 session + prompt + model 去重。旧 `_meta.turnStartMs` / `_meta.totalTokens` 是会随 compaction 回退的上下文快照，只单列为“旧日志估算”，**不进入今日总数**。
 - **Gemini CLI**：读取 `session-*.json` 中每条 `type: gemini` 消息的 `tokens.total`，缺少 total 时合计 input、output 与 thoughts；cached 是 input 子集，不重复加入。
@@ -45,9 +47,11 @@ Poll every 2.5s. Take one process snapshot, then inspect each store. Cursor, Cla
 
 点击跳转顺序 / Click-to-focus order:
 
-1. 按 Session 的 `runtime` 读取 `focusApps` / `focusApp`，先前置已运行的对应 App。  
-2. 无辅助功能权限时使用 `open -a <App>`，它会前置已运行实例或启动已安装 App。Codex 同时尝试 `Codex` 与实际承载它的 `ChatGPT` App。  
-3. 只要 Runtime 配置了 App 目标，失败后就返回错误，**绝不**把项目名或 `cwd` 当 App 打开。只有没有任何 App 目标的自定义 Runtime 才允许用目录作为最后回退。
+1. IDE（Cursor / Windsurf / Zed）：有 `cwd` 时先用配置里的 `openBin` 打开该项目，失败再 `open -a <App> <cwd>`。
+2. 终端 CLI（Claude Code / Codex / Gemini 等）：点击时异步读取当前进程树，并用进程 cwd 对照 Session `cwd`。只有证据唯一时才前置对应终端（iTerm / Ghostty / Warp / Terminal…）；多个终端无法消歧时保守回退，不保证落到具体 tab / pane。
+3. 再按 `focusApps` / `focusApp` 做 `open -a <App>`；无辅助功能权限时同样走 `open -a`。Codex 同时尝试 `Codex` 与实际承载它的 `ChatGPT` App。
+4. 只要 Runtime 配置了 App 目标，失败后就返回错误，**绝不**把项目名或 `cwd` 当 App 打开。只有没有任何 App 目标的自定义 Runtime 才允许用目录作为最后回退。
+5. 跳转只在点击时发生，不在扫描循环里跑 AppleScript。
 
 **工作目录**优先从 Session 文件字段读；没有再用目录名反解（把 `Users-me-code-foo` / `-Users-me-code-foo` 还原成 `/Users/me/code/foo`，并尝试最后一段用 `.` 连接，以覆盖 `niul.ai`）。
 

@@ -5,6 +5,8 @@ const path = require("path");
 const CACHE_MS = 30000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_FILES = 20000;
+const MAX_RATE_LIMIT_FILES = 24;
+const MAX_RATE_LIMIT_BYTES = 512 * 1024;
 let cached = null;
 
 function exists(file) {
@@ -67,16 +69,17 @@ function filesTouchedToday(roots, predicate, dayStart) {
   });
   return {
     files,
+    allFiles: discovered,
     discoveredFiles: discovered.length,
     limitHit: discovered.length >= MAX_FILES,
   };
 }
 
-function readRecentLines(file, marker) {
+function readRecentLines(file, marker, maxBytes = MAX_FILE_BYTES) {
   let handle;
   try {
     const metadata = fs.statSync(file);
-    const start = Math.max(0, metadata.size - MAX_FILE_BYTES);
+    const start = Math.max(0, metadata.size - maxBytes);
     handle = fs.openSync(file, "r");
     const buffer = Buffer.alloc(metadata.size - start);
     fs.readSync(handle, buffer, 0, buffer.length, start);
@@ -171,10 +174,63 @@ function addSessionTokens(sessions, key, tokens) {
   if (tokens > 0) sessions[key] = (sessions[key] || 0) + tokens;
 }
 
-function codexTokens(roots, dayStart, dayEnd, sessions) {
-  const result = { id: "codex", label: "Codex", tokens: 0, files: 0, confidence: "high" };
+function readCodexRateLimit(payload, timestamp, now) {
+  const limits = payload && payload.rate_limits;
+  const primary = limits && limits.primary;
+  if (!primary || !Number.isFinite(Number(primary.used_percent))) return null;
+  const eventAt = Number(timestamp);
+  const resetValue = Number(primary.resets_at);
+  const resetsAt = Number.isFinite(resetValue)
+    ? resetValue > 1e12
+      ? resetValue
+      : resetValue * 1000
+    : 0;
+  if (!Number.isFinite(eventAt) || eventAt > now || !resetsAt || resetsAt <= now) return null;
+  const usedPercent = Math.min(100, Math.max(0, Number(primary.used_percent)));
+  return {
+    usedPercent,
+    remainingPercent: Math.round((100 - usedPercent) * 10) / 10,
+    windowMinutes: Number(primary.window_minutes) || 0,
+    resetsAt,
+    timestamp: eventAt,
+    limitId: String(limits.limit_id || "codex"),
+    planType: limits.plan_type || "",
+  };
+}
+
+function latestCodexRateLimit(files, now) {
+  const candidates = files
+    .map((file) => ({ file, mtime: stat(file)?.mtimeMs || 0 }))
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, MAX_RATE_LIMIT_FILES);
+  let latest = null;
+  for (const candidate of candidates) {
+    const { lines } = readRecentLines(
+      candidate.file,
+      '"rate_limits"',
+      MAX_RATE_LIMIT_BYTES
+    );
+    for (const line of lines) {
+      let record;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (record.type !== "event_msg" || record.payload?.type !== "token_count") continue;
+      const timestamp = timestampMs(record.timestamp);
+      const rateLimit = readCodexRateLimit(record.payload, timestamp, now);
+      if (rateLimit && rateLimit.timestamp >= (latest?.timestamp || 0)) latest = rateLimit;
+    }
+  }
+  return latest;
+}
+
+function codexTokens(roots, dayStart, dayEnd, sessions, now) {
+  const result = { id: "codex", label: "Codex", tokens: 0, files: 0, confidence: "high", rateLimit: null };
   const discovered = filesTouchedToday(roots, (file) => file.endsWith(".jsonl"), dayStart);
   const files = discovered.files;
+  result.rateLimit = latestCodexRateLimit(discovered.allFiles, now);
   const seenEvents = new Set();
   if (discovered.limitHit) result.confidence = "partial";
 
@@ -484,22 +540,6 @@ function geminiTokens(roots, dayStart, dayEnd, sessions) {
 function collectTokenUsage(now = Date.now(), options = {}) {
   const dayStart = localDayStart(now);
   const dayEnd = localDayEnd(now);
-  const rootOptions = [
-    "codexHome",
-    "codexRoot",
-    "codexArchiveRoot",
-    "claudeHome",
-    "claudeRoot",
-    "grokHome",
-    "grokRoot",
-    "grokArchiveRoot",
-    "geminiHome",
-    "geminiRoot",
-  ];
-  const useDefaultRoots = rootOptions.every((key) => !options[key]);
-  if (useDefaultRoots && cached && cached.dayStart === dayStart && now - cached.collectedAt < CACHE_MS) {
-    return cached.snapshot;
-  }
 
   const home = os.homedir();
   const codexHome = options.codexHome || process.env.CODEX_HOME || path.join(home, ".codex");
@@ -523,15 +563,28 @@ function collectTokenUsage(now = Date.now(), options = {}) {
     ? [options.grokRoot, options.grokArchiveRoot]
     : [path.join(grokHome, "sessions"), path.join(grokHome, "archived_sessions")];
   const geminiRoots = [options.geminiRoot || path.join(geminiHome, "tmp")];
+  const cacheKey = JSON.stringify([codexRoots, claudeRoots, grokRoots, geminiRoots]);
+  if (
+    cached &&
+    cached.cacheKey === cacheKey &&
+    cached.dayStart === dayStart &&
+    now - cached.collectedAt < CACHE_MS
+  ) {
+    return cached.snapshot;
+  }
 
   const sessions = {};
   const sources = [
-    codexTokens(codexRoots, dayStart, dayEnd, sessions),
+    codexTokens(codexRoots, dayStart, dayEnd, sessions, now),
     claudeTokens(claudeRoots, dayStart, dayEnd, sessions),
     grokTokens(grokRoots, dayStart, dayEnd, sessions),
     geminiTokens(geminiRoots, dayStart, dayEnd, sessions),
   ].filter(
-    (source) => source.files > 0 || source.tokens > 0 || Number(source.estimatedTokens || 0) > 0
+    (source) =>
+      source.files > 0 ||
+      source.tokens > 0 ||
+      Number(source.estimatedTokens || 0) > 0 ||
+      Boolean(source.rateLimit)
   );
   const snapshot = {
     dayStart,
@@ -540,6 +593,7 @@ function collectTokenUsage(now = Date.now(), options = {}) {
     estimatedTokens: sources.reduce((sum, source) => sum + Number(source.estimatedTokens || 0), 0),
     sources,
     sessions,
+    rateLimit: sources.find((source) => source.id === "codex")?.rateLimit || null,
     supportedRuntimes: ["codex", "claude-code", "grok", "gemini"],
     unsupportedReasons: {
       cursor: "Cursor 本机 Session 未暴露完整实际 usage；不按文本或稀疏私有字段估算",
@@ -547,7 +601,7 @@ function collectTokenUsage(now = Date.now(), options = {}) {
     },
     collectedAt: now,
   };
-  if (useDefaultRoots) cached = { dayStart, collectedAt: now, snapshot };
+  cached = { cacheKey, dayStart, collectedAt: now, snapshot };
   return snapshot;
 }
 

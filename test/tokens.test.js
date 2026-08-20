@@ -81,6 +81,169 @@ test("Codex prefers exact last usage across interleaved cumulative lanes", (t) =
   assert.equal(result.sources.find((source) => source.id === "codex").tokens, 150);
 });
 
+test("Codex reads the latest local rate_limits window", (t) => {
+  const roots = workspace(t);
+  const now = Date.now();
+  writeJsonl(path.join(roots.codexRoot, "session-quota.jsonl"), [
+    {
+      timestamp: new Date(now - 2000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: { last_token_usage: { total_tokens: 10 } },
+        rate_limits: {
+          plan_type: "pro",
+          primary: { used_percent: 30, window_minutes: 10080, resets_at: Math.floor((now + 4 * 86400000) / 1000) },
+        },
+      },
+    },
+    {
+      timestamp: new Date(now - 1000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: { last_token_usage: { total_tokens: 20 } },
+        rate_limits: {
+          plan_type: "pro",
+          primary: { used_percent: 31.5, window_minutes: 10080, resets_at: Math.floor((now + 3 * 86400000) / 1000) },
+        },
+      },
+    },
+  ]);
+  const result = collectTokenUsage(now, roots);
+  const source = result.sources.find((item) => item.id === "codex");
+  assert.equal(source.rateLimit.usedPercent, 31.5);
+  assert.equal(source.rateLimit.remainingPercent, 68.5);
+  assert.equal(source.rateLimit.windowMinutes, 10080);
+  assert.equal(result.rateLimit.remainingPercent, 68.5);
+});
+
+test("Codex keeps a valid rate-only window across midnight", (t) => {
+  const roots = workspace(t);
+  const now = Date.now();
+  const start = localDayStart(now);
+  writeJsonl(path.join(roots.codexRoot, "session-rate-only.jsonl"), [
+    {
+      timestamp: new Date(start - 60 * 60 * 1000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {},
+        rate_limits: {
+          limit_id: "codex",
+          primary: {
+            used_percent: 40,
+            window_minutes: 10080,
+            resets_at: Math.floor((now + 2 * 86400000) / 1000),
+          },
+        },
+      },
+    },
+  ]);
+
+  const result = collectTokenUsage(now, roots);
+  assert.equal(result.tokens, 0);
+  assert.equal(result.rateLimit.remainingPercent, 60);
+  assert.equal(result.sources.find((source) => source.id === "codex").tokens, 0);
+});
+
+test("Codex ignores future and expired rate-limit records", (t) => {
+  const roots = workspace(t);
+  const now = Date.now();
+  writeJsonl(path.join(roots.codexRoot, "session-invalid-rate.jsonl"), [
+    {
+      timestamp: new Date(now - 2000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {},
+        rate_limits: {
+          primary: {
+            used_percent: 90,
+            window_minutes: 10080,
+            resets_at: Math.floor((now - 1000) / 1000),
+          },
+        },
+      },
+    },
+    {
+      timestamp: new Date(now + 60_000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {},
+        rate_limits: {
+          primary: {
+            used_percent: 10,
+            window_minutes: 10080,
+            resets_at: Math.floor((now + 86400000) / 1000),
+          },
+        },
+      },
+    },
+  ]);
+
+  const result = collectTokenUsage(now, roots);
+  assert.equal(result.rateLimit, null);
+  assert.equal(result.sources.some((source) => source.id === "codex"), false);
+});
+
+test("Codex clamps malformed rate-limit percentages", (t) => {
+  const roots = workspace(t);
+  const now = Date.now();
+  writeJsonl(path.join(roots.codexRoot, "session-clamped-rate.jsonl"), [
+    {
+      timestamp: new Date(now - 1000).toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {},
+        rate_limits: {
+          primary: {
+            used_percent: 150,
+            window_minutes: 10080,
+            resets_at: Math.floor((now + 86400000) / 1000),
+          },
+        },
+      },
+    },
+  ]);
+
+  const result = collectTokenUsage(now, roots);
+  assert.equal(result.rateLimit.usedPercent, 100);
+  assert.equal(result.rateLimit.remainingPercent, 0);
+});
+
+test("Token cache is reused and expires for custom roots", (t) => {
+  const roots = workspace(t);
+  const now = Date.now();
+  const file = path.join(roots.codexRoot, "session-cache.jsonl");
+  writeJsonl(file, [
+    {
+      timestamp: new Date(now - 1000).toISOString(),
+      type: "event_msg",
+      payload: { type: "token_count", info: { last_token_usage: { total_tokens: 10 } } },
+    },
+  ]);
+  assert.equal(collectTokenUsage(now, roots).tokens, 10);
+
+  writeJsonl(file, [
+    {
+      timestamp: new Date(now - 1000).toISOString(),
+      type: "event_msg",
+      payload: { type: "token_count", info: { last_token_usage: { total_tokens: 10 } } },
+    },
+    {
+      timestamp: new Date(now + 1000).toISOString(),
+      type: "event_msg",
+      payload: { type: "token_count", info: { last_token_usage: { total_tokens: 20 } } },
+    },
+  ]);
+
+  assert.equal(collectTokenUsage(now + 2000, roots).tokens, 10);
+  assert.equal(collectTokenUsage(now + 31_000, roots).tokens, 30);
+});
+
 test("Codex total-only fallback uses a component high-water mark", (t) => {
   const roots = workspace(t);
   const now = Date.now();

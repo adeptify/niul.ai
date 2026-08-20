@@ -19,6 +19,10 @@ const { EastmoneyIndexProvider } = require("./market/eastmoney-provider");
 const { MarketService } = require("./market/market-service");
 const { MarketReactionEngine } = require("./market/reactions");
 const {
+  createWaitingReminderEngine,
+  withWaitingReminder,
+} = require("./waiting-reminders");
+const {
   windowPositionForCursor,
   windowPositionForRectGrab,
 } = require("./window-position");
@@ -37,6 +41,7 @@ let marketService;
 let marketReactionEngine;
 let memoTimer;
 let mouseGuardTimer;
+let backgroundScanTimer;
 let scanWorker;
 let scanInFlight;
 let scanRequestId = 0;
@@ -45,6 +50,9 @@ let ignoreMouseRequested = true;
 let mouseEventsIgnored = null;
 let interactiveRegions = [];
 let lastSnapshot = null;
+let chatterEnabled = true;
+const waitingReminders = createWaitingReminderEngine();
+const activeWaitingNotifications = new Set();
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
@@ -57,6 +65,9 @@ function showWindow() {
   applyIgnoreMouse(false);
   app.focus({ steal: true });
   win.focus();
+  if (win.webContents && !win.webContents.isDestroyed()) {
+    win.webContents.send("request-scan");
+  }
 }
 
 function toggleWindow() {
@@ -87,6 +98,56 @@ function announceDueMemos() {
     }
     if (win && !win.isDestroyed()) win.webContents.send("memo-due", memo);
   }
+}
+
+function processWaitingReminders(snapshot) {
+  waitingReminders.observe(snapshot?.rows || [], Number(snapshot?.scannedAt) || Date.now());
+  if (!chatterEnabled) return null;
+  const due = waitingReminders.claimDue();
+  if (!due) return null;
+
+  if (win && !win.isDestroyed() && win.isVisible()) {
+    setTimeout(() => waitingReminders.complete(due.id, false), 5000);
+    return due;
+  }
+
+  if (!Notification.isSupported()) {
+    waitingReminders.complete(due.id, false);
+    return null;
+  }
+  try {
+    const notification = new Notification({
+      title: "牛来提醒你",
+      body: due.text.slice(0, 180),
+      silent: false,
+    });
+    let settled = false;
+    const finish = (delivered) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      activeWaitingNotifications.delete(notification);
+      waitingReminders.complete(due.id, delivered);
+    };
+    const timeout = setTimeout(() => finish(false), 5000);
+    activeWaitingNotifications.add(notification);
+    notification.once("show", () => finish(true));
+    notification.once("failed", () => finish(false));
+    notification.on("click", showWindow);
+    notification.show();
+  } catch {
+    waitingReminders.complete(due.id, false);
+  }
+  return null;
+}
+
+function scheduleBackgroundScanning() {
+  if (backgroundScanTimer) clearInterval(backgroundScanTimer);
+  const interval = Math.max(2500, Number(config?.pollMs) || 5000);
+  backgroundScanTimer = setInterval(() => {
+    if (!win || win.isDestroyed() || win.isVisible()) return;
+    snapshot().catch(() => {});
+  }, interval);
 }
 
 function createWindow() {
@@ -133,7 +194,8 @@ function finishScan(message = {}) {
   scanInFlight = null;
   if (message.snapshot) {
     lastSnapshot = message.snapshot;
-    resolve(lastSnapshot);
+    const waitingReminder = processWaitingReminders(lastSnapshot);
+    resolve(withWaitingReminder(lastSnapshot, waitingReminder));
     return;
   }
   const error = new Error(message.error?.message || "Session scan failed");
@@ -263,6 +325,7 @@ app.whenReady().then(() => {
   marketReactionEngine = new MarketReactionEngine();
   createWindow();
   registerGlobalShortcut();
+  scheduleBackgroundScanning();
   memoTimer = setInterval(announceDueMemos, 15000);
   mouseGuardTimer = setInterval(() => applyIgnoreMouse(ignoreMouseRequested), 50);
 
@@ -308,6 +371,7 @@ app.whenReady().then(() => {
       marketReactionEngine = new MarketReactionEngine();
     }
     registerGlobalShortcut();
+    scheduleBackgroundScanning();
     return config;
   });
   ipcMain.handle("choose-directory", async () => {
@@ -331,6 +395,15 @@ app.whenReady().then(() => {
   ipcMain.handle("focus-session", async (_e, session) => {
     const runtimeCfg = (config.runtimes && config.runtimes[session.runtime]) || {};
     return focusSession(session, runtimeCfg);
+  });
+  ipcMain.on("ack-waiting-session", (_e, id) => {
+    waitingReminders.acknowledge(id);
+  });
+  ipcMain.on("complete-waiting-nudge", (_e, payload) => {
+    waitingReminders.complete(payload?.id, Boolean(payload?.delivered));
+  });
+  ipcMain.on("set-chatter-enabled", (_e, enabled) => {
+    chatterEnabled = Boolean(enabled);
   });
   ipcMain.on("set-ignore-mouse", (_e, ignore) => {
     ignoreMouseRequested = Boolean(ignore);
@@ -358,5 +431,6 @@ app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   if (memoTimer) clearInterval(memoTimer);
   if (mouseGuardTimer) clearInterval(mouseGuardTimer);
+  if (backgroundScanTimer) clearInterval(backgroundScanTimer);
   scanWorker?.terminate();
 });

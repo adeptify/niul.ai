@@ -334,7 +334,7 @@ textarea:focus-visible,
 
 .summary-rail {
   display: grid;
-  grid-template-columns: repeat(4, max-content) 1fr;
+  grid-template-columns: repeat(4, max-content);
   align-items: center;
   gap: 9px;
   min-height: 37px;
@@ -383,14 +383,6 @@ textarea:focus-visible,
 
 .summary-item.offline {
   color: var(--offline);
-}
-
-.last-scan {
-  justify-self: end;
-  overflow: hidden;
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .bubble-body {
@@ -1090,12 +1082,14 @@ textarea:focus-visible,
   background: #a76462;
 }
 
-#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye {
+#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye,
+#pet[data-face-fx="fallback"].is-wait-attention .cow-fx-eye {
   opacity: 1;
   animation: cowFallbackEyeLook 420ms var(--ease-out) both;
 }
 
-#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye::after {
+#pet[data-face-fx="fallback"] .cow-stage.is-observing-session .cow-fx-eye::after,
+#pet[data-face-fx="fallback"].is-wait-attention .cow-fx-eye::after {
   animation: cowFallbackPupilLook 420ms var(--ease-out) both;
 }
 
@@ -1164,12 +1158,14 @@ textarea:focus-visible,
   animation: cowRoll 560ms var(--ease-out);
 }
 
-#pet[data-face-fx="fallback"].is-observing-session .cow-stage:not(.is-speaking) .cow-motion {
+#pet[data-face-fx="fallback"].is-observing-session .cow-stage:not(.is-speaking) .cow-motion,
+#pet[data-face-fx="fallback"].is-wait-attention .cow-stage:not(.is-speaking) .cow-motion {
   transform-origin: 50% 72%;
   animation: cowFallbackLook 420ms var(--ease-out) both;
 }
 
-#pet[data-face-fx="fallback"].is-observing-session .cow-stage.is-speaking .cow-motion {
+#pet[data-face-fx="fallback"].is-observing-session .cow-stage.is-speaking .cow-motion,
+#pet[data-face-fx="fallback"].is-wait-attention .cow-stage.is-speaking .cow-motion {
   transform-origin: 50% 72%;
   animation: cowFallbackLookTalk 540ms ease-in-out infinite;
 }

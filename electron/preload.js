@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld("niulai", {
   saveMemo: (memo) => ipcRenderer.invoke("save-memo", memo),
   completeMemo: (id) => ipcRenderer.invoke("complete-memo", id),
   focusSession: (session) => ipcRenderer.invoke("focus-session", session),
+  ackWaitingSession: (id) => ipcRenderer.send("ack-waiting-session", id),
+  completeWaitingNudge: (id, delivered) =>
+    ipcRenderer.send("complete-waiting-nudge", { id, delivered }),
+  setChatterEnabled: (enabled) => ipcRenderer.send("set-chatter-enabled", enabled),
   setIgnoreMouse: (ignore) => ipcRenderer.send("set-ignore-mouse", ignore),
   setInteractiveRegions: (regions) => ipcRenderer.send("set-interactive-regions", regions),
   startWindowDrag: (payload) => ipcRenderer.send("start-window-drag", payload),
