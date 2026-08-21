@@ -6,15 +6,15 @@
   <b>English</b> · <a href="README.md">简体中文</a>
 </p>
 
-<h1 align="center">See which coding agent is working, waiting, or idle.</h1>
+<h1 align="center">Your agent won't knock when it's done. The cow will.</h1>
 
 <p align="center">
-  Niul.ai is an ambient macOS monitor for local AI coding sessions,<br>
-  disguised as a slightly janky yellow desktop cow.
+  Niul.ai is a slightly janky yellow cow that lives on your macOS desktop.<br>
+  It watches Cursor, Claude Code, Codex, and the rest—then tells you who is working and who is waiting.
 </p>
 
 <p align="center">
-  <a href="https://github.com/adeptify/niul.ai/releases/latest"><b>Download the latest release</b></a>
+  <a href="https://github.com/adeptify/niul.ai/releases/latest"><b>Bring the cow home</b></a>
   ·
   <a href="#the-problem">Why it exists</a>
   ·
@@ -28,7 +28,9 @@
 </p>
 
 <p align="center">
-  <img src="assets/github-social-preview.png" width="100%" alt="Niul.ai, an ambient monitor for local AI coding agents">
+  <img src="assets/niulai-latest-home.png" width="72%" alt="Niul.ai showing working, waiting, idle, and offline AI sessions on a macOS desktop">
+  <br>
+  <sub>The screenshot uses mock data. It contains no real usernames, paths, sessions, or token records.</sub>
 </p>
 
 ## The problem
@@ -49,12 +51,6 @@ Niul.ai translates runtime activity into four deliberately simple states:
 - ⚫ **回棚 · Back in the barn** — the runtime is offline
 
 The current app UI uses the Chinese labels above. They are cattle metaphors, not mysterious error codes.
-
-<p align="center">
-  <img src="assets/niulai-session-overview.png" width="72%" alt="Niul.ai session states, runtime filters, and local token usage">
-  <br>
-  <sub>The screenshot uses mock data. It contains no real usernames, paths, sessions, or token records.</sub>
-</p>
 
 ## Built for an agent-heavy workflow
 
@@ -105,7 +101,27 @@ Hover a session and the cow looks toward it. Drag the cow and it follows. Double
   <img src="assets/niulai-football-v1.png" width="15%" alt="Niul.ai playing football">
 </p>
 
-There is also an optional market strip for major indices from mainland China, Hong Kong, and the US. Market reactions never outrank agent state. Public quote data may be delayed, and the entire feature can be disabled in Settings.
+There is also an optional market panel for eight major indices from mainland China, Hong Kong, and the US.
+
+<p align="center">
+  <img src="assets/niulai-latest-market.png" width="72%" alt="Niul.ai market panel showing eight major indices from China, Hong Kong, and the US">
+  <br>
+  <sub>The market screenshot uses mock data. Live public quotes may be delayed.</sub>
+</p>
+
+Market reactions never outrank agent state. Public quote data may be delayed, and the entire feature can be disabled in Settings.
+
+### Quick Memo, with a cow attached
+
+When something needs your attention later, right-click the cow or open **Quick Memo** from the header. Write one line, keep it as a local note, or ask the cow to remind you in 15 minutes, one hour, or tomorrow at 9:00.
+
+When the time comes, the cow speaks up. Mark the memo done when you have handled it. Notes and reminders stay on your Mac.
+
+<p align="center">
+  <img src="assets/niulai-latest-memo.png" width="72%" alt="Quick Memo saving a local note with fifteen-minute, one-hour, and tomorrow reminders">
+  <br>
+  <sub>The screenshot uses mock content. Your actual notes and reminders stay on your Mac.</sub>
+</p>
 
 ## Local-first
 
@@ -178,7 +194,7 @@ The repository also includes [`安装牛来.command`](安装牛来.command), whi
 - **Open the gear:** choose runtimes, add a custom runtime, resize the cow and bubble, or configure market reactions
 - **Open the power menu:** collapse, hide, or quit completely
 
-By default, the list filters to actively working sessions. If it looks empty, switch the state filter to **All** or check the enabled runtimes in Settings.
+By default, the list prioritizes sessions waiting for you. If it looks empty, switch to another state or check the enabled runtimes in Settings.
 
 ## Current limitations
 
