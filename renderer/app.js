@@ -9,12 +9,14 @@ const STATUS_TEXT = {
 };
 
 const STATUS_HEADING = {
-  working: "正在拉犁",
-  waiting: "停犁等你",
-  idle: "正在吃草",
-  offline: "已回棚",
+  working: "拉犁",
+  waiting: "停犁优先",
+  idle: "吃草",
+  offline: "回棚",
   all: "所有会话",
 };
+
+const APPEARANCE_STORAGE_KEY = "niulai.appearance";
 
 function waitWhyOf(row) {
   return row && row.status === "waiting" ? row.waitWhy || "next" : "";
@@ -22,6 +24,41 @@ function waitWhyOf(row) {
 
 function sessionName(row) {
   return row.cwdName || row.title || row.label || "这头";
+}
+
+function compactDisplayPath(value) {
+  return String(value || "").replace(/^\/Users\/[^/]+/, "~");
+}
+
+function sessionWorkSummary(row, displayName, fallbackText) {
+  const label = String(row?.label || "").trim();
+  const runtime = String(row?.runtime || "").trim();
+  const prefixes = [label, label.split(/\s+/)[0], runtime, "Agent"]
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+  const clean = (value) => {
+    let result = String(value || "").trim();
+    for (const prefix of prefixes) {
+      const lowerResult = result.toLocaleLowerCase();
+      const lowerPrefix = prefix.toLocaleLowerCase();
+      if (lowerResult === lowerPrefix) return "";
+      if (!lowerResult.startsWith(lowerPrefix)) continue;
+      const tail = result.slice(prefix.length);
+      if (!/^[\s·:：|/\\_-]/.test(tail)) continue;
+      result = tail.replace(/^[\s·:：|/\\_-]+/, "").trim();
+      break;
+    }
+    return result;
+  };
+  const title = String(row?.title || "").trim();
+  const completed = String(row?.workSummary || "").trim();
+  const source = completed || (title && title !== displayName ? title : fallbackText);
+  let summary = clean(source);
+  if (!summary || /^(running|active|working)$/i.test(summary)) {
+    summary = clean(fallbackText);
+  }
+  if (!summary || /^(running|active|working)$/i.test(summary)) return "状态更新";
+  return summary;
 }
 
 function waitingCopy(row) {
@@ -300,17 +337,25 @@ let currentFrameSource = "";
 let frameRequestId = 0;
 let mood = "";
 let currentSkinId = localStorage.getItem("niulai.cowSkin") || "original";
-let activeRuntimeFilter = localStorage.getItem("niulai.runtimeFilter") || "all";
-const STATUS_FILTER_VERSION = "2";
-let activeStatusFilter =
-  localStorage.getItem("niulai.statusFilterVersion") === STATUS_FILTER_VERSION
-    ? localStorage.getItem("niulai.statusFilter") || "working"
-    : "working";
+let activeRuntimeFilter = "all";
+localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
+const STATUS_FILTER_VERSION = "3";
+const PERSISTED_STATUS_FILTERS = new Set(["working", "waiting", "idle", "offline"]);
+function restoreStatusFilter() {
+  const stored =
+    localStorage.getItem("niulai.statusFilterVersion") === STATUS_FILTER_VERSION
+      ? localStorage.getItem("niulai.statusFilter")
+      : "";
+  return PERSISTED_STATUS_FILTERS.has(stored) ? stored : "waiting";
+}
+let activeStatusFilter = restoreStatusFilter();
 localStorage.setItem("niulai.statusFilter", activeStatusFilter);
 localStorage.setItem("niulai.statusFilterVersion", STATUS_FILTER_VERSION);
 let config;
 let latestRows = [];
 let latestSnapshot = null;
+let activeBubbleOverlay = null;
+let overlayReturnFocus = null;
 let lastListRenderKey = "";
 let draftCustom = [];
 let scanTimer;
@@ -565,13 +610,82 @@ function marketDirection(value) {
   return "flat";
 }
 
+function applyAppearance(theme, { persist = true } = {}) {
+  theme = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  if (persist) localStorage.setItem(APPEARANCE_STORAGE_KEY, theme);
+  document.getElementById("menuThemeLabel").textContent =
+    theme === "dark" ? "切换到浅色" : "切换到深色";
+  document.getElementById("menuThemeHint").textContent =
+    theme === "dark" ? "当前为深色外观" : "当前为浅色外观";
+  const sun = document.querySelector("#menuToggleTheme .theme-icon-sun");
+  const moon = document.querySelector("#menuToggleTheme .theme-icon-moon");
+  sun.hidden = theme === "light";
+  sun.setAttribute("aria-hidden", String(theme === "light"));
+  moon.hidden = theme === "dark";
+  moon.setAttribute("aria-hidden", String(theme === "dark"));
+}
+
+function setActiveBubbleOverlay(name) {
+  const next =
+    name === "memo" || name === "market" || name === "settings" ? name : null;
+  const previous = activeBubbleOverlay;
+  const focused = document.activeElement;
+  if (
+    next &&
+    focused instanceof HTMLElement &&
+    (previous === null || focused.closest(".head-actions"))
+  ) {
+    overlayReturnFocus = focused;
+  }
+  if (activeBubbleOverlay === "settings" && next !== "settings") {
+    applyDisplayScale(config);
+  }
+  activeBubbleOverlay = next;
+  document.getElementById("quickMemo").hidden = activeBubbleOverlay !== "memo";
+  document.getElementById("marketBoard").hidden = activeBubbleOverlay !== "market";
+  document.getElementById("settings").hidden = activeBubbleOverlay !== "settings";
+  for (const [buttonId, overlayName] of [
+    ["memoButton", "memo"],
+    ["marketButton", "market"],
+    ["gear", "settings"],
+  ]) {
+    const button = document.getElementById(buttonId);
+    const selected = activeBubbleOverlay === overlayName;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+  for (const id of ["summaryRail", "bubbleBody"]) {
+    const covered = document.getElementById(id);
+    const hiddenByWorkspace = Boolean(activeBubbleOverlay);
+    covered.inert = hiddenByWorkspace;
+    covered.setAttribute("aria-hidden", String(hiddenByWorkspace));
+  }
+  if (activeBubbleOverlay) {
+    setPetMenuOpen(false);
+    api.setIgnoreMouse(false);
+  }
+  if (previous && !activeBubbleOverlay) {
+    const returnTarget = overlayReturnFocus;
+    overlayReturnFocus = null;
+    window.requestAnimationFrame(() => {
+      if (returnTarget instanceof HTMLElement && returnTarget.isConnected) {
+        returnTarget.focus();
+      }
+    });
+  }
+}
+
 function renderMarket(snapshot) {
   const board = document.getElementById("marketBoard");
   const grid = document.getElementById("marketGrid");
   const meta = document.getElementById("marketMeta");
   const enabled = config?.market?.enabled !== false;
-  board.hidden = !enabled;
-  if (!enabled) return;
+  if (!enabled) {
+    latestMarketSnapshot = snapshot;
+    if (activeBubbleOverlay === "market") setActiveBubbleOverlay(null);
+    return;
+  }
 
   latestMarketSnapshot = snapshot;
   board.classList.toggle("is-stale", snapshot?.status === "stale");
@@ -654,8 +768,7 @@ function marketReactionIsBlocked() {
   return (
     Date.now() < priorityBusyUntil ||
     Boolean(pointerDown) ||
-    document.getElementById("settings")?.open ||
-    !document.getElementById("quickMemo")?.hidden ||
+    Boolean(activeBubbleOverlay) ||
     stage?.matches(
       ".is-speaking, .is-observing-session, .is-petted, .is-rolling, .is-dragging, .is-moo-marathon"
     )
@@ -895,17 +1008,30 @@ async function renderMemos() {
 }
 
 async function openMemoPanel() {
-  const panel = document.getElementById("quickMemo");
-  panel.hidden = false;
-  setPetMenuOpen(false);
-  api.setIgnoreMouse(false);
+  if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+    setBubbleCollapsed(false, { silent: true });
+  }
+  setActiveBubbleOverlay("memo");
   await renderMemos();
   document.getElementById("memoText").focus();
   showCaption("记吧，我帮你想着。", 1500);
 }
 
 function closeMemoPanel() {
-  document.getElementById("quickMemo").hidden = true;
+  setActiveBubbleOverlay(null);
+}
+
+function openMarketPanel() {
+  if (config?.market?.enabled === false) return;
+  if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+    setBubbleCollapsed(false, { silent: true });
+  }
+  setActiveBubbleOverlay("market");
+  window.requestAnimationFrame(() => document.getElementById("closeMarket").focus());
+}
+
+function closeMarketPanel() {
+  setActiveBubbleOverlay(null);
 }
 
 async function saveQuickMemo() {
@@ -925,14 +1051,33 @@ async function saveQuickMemo() {
   showToast(remindAt ? "Memo 已保存并设置提醒" : "Memo 已保存");
 }
 
+function statusCaptionText(snapshot) {
+  const counts = snapshot.counts || {};
+  const filter = activeStatusFilter === "all" ? "all" : activeStatusFilter;
+  const count = Number(counts[filter] || 0);
+  if (filter === "waiting") {
+    return count ? `有 ${count} 个任务等你回来接着走。` : "暂时没有任务等你回来接着走。";
+  }
+  if (filter === "working") {
+    return count ? `有 ${count} 个任务正在进行。` : "暂时没有任务正在进行。";
+  }
+  if (filter === "idle") {
+    return count ? `有 ${count} 个任务暂时空闲。` : "暂时没有任务空闲。";
+  }
+  if (filter === "offline") {
+    return count ? `有 ${count} 个任务暂未连接。` : "暂时没有任务未连接。";
+  }
+  return "暂时没有需要盯着的任务。";
+}
+
 function renderSummary(snapshot) {
   const { counts } = snapshot;
   document.getElementById("workingCount").textContent = counts.working || 0;
   document.getElementById("waitingCount").textContent = counts.waiting || 0;
   document.getElementById("idleCount").textContent = counts.idle || 0;
   document.getElementById("offlineCount").textContent = counts.offline || 0;
-  document.getElementById("statusLine").textContent =
-    (MOOD_COPY[snapshot.mood] || MOOD_COPY.waiting)(counts, snapshot.rows || []);
+  document.getElementById("statusLine").textContent = "刚刚巡视";
+  document.getElementById("statusCaption").textContent = statusCaptionText(snapshot);
 }
 
 function renderTokenUsage(snapshot) {
@@ -1001,27 +1146,19 @@ function renderRuntimeFilters(rows) {
 }
 
 function renderStatusFilters(rows) {
-  const filters = document.getElementById("statusFilters");
+  const rail = document.getElementById("summaryRail");
   const counts = rows.reduce((acc, row) => {
     acc[row.status] = (acc[row.status] || 0) + 1;
     return acc;
   }, {});
-  const items = [
-    { id: "working", label: STATUS_TEXT.working, count: counts.working || 0 },
-    { id: "waiting", label: STATUS_TEXT.waiting, count: counts.waiting || 0 },
-    { id: "idle", label: STATUS_TEXT.idle, count: counts.idle || 0 },
-    { id: "offline", label: STATUS_TEXT.offline, count: counts.offline || 0 },
-    { id: "all", label: "全部", count: rows.length },
-  ];
-  filters.innerHTML = items
-    .map(
-      (item) => `
-        <button type="button" class="status-filter ${item.id === activeStatusFilter ? "is-active" : ""}"
-                data-status-filter="${item.id}" aria-pressed="${item.id === activeStatusFilter}">
-          <i class="${item.id}" aria-hidden="true"></i>${item.label} <span>${item.count}</span>
-        </button>`
-    )
-    .join("");
+  for (const button of rail.querySelectorAll("[data-status-filter]")) {
+    const id = button.dataset.statusFilter;
+    const active = id === activeStatusFilter;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    const count = document.getElementById(`${id}Count`);
+    count.textContent = String(counts[id] || 0);
+  }
 }
 
 function renderSessionRows(snapshot) {
@@ -1037,10 +1174,7 @@ function renderSessionRows(snapshot) {
       : runtimeRows.filter((row) => row.status === activeStatusFilter);
   document.getElementById("sessionHeading").textContent =
     STATUS_HEADING[activeStatusFilter] || "Session";
-  document.getElementById("sessionTotal").textContent =
-    activeRuntimeFilter === "all" && activeStatusFilter === "all"
-      ? `${rows.length} 个`
-      : `${rows.length} / ${snapshot.rows.length} 个`;
+  document.getElementById("sessionTotal").textContent = `${rows.length} 个`;
 
   if (!rows.length) {
     const filtered = snapshot.rows.length > 0;
@@ -1050,7 +1184,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>当前筛选下没有 Session</strong>
-          <span>默认只看「${STATUS_TEXT.working}」。上面还有其他状态，或点「全部」看完整巡视。</span>
+          <span>当前只看「${STATUS_TEXT[activeStatusFilter] || STATUS_TEXT.waiting}」。上面还有其他状态，或点「全部」看完整巡视。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="show-all">查看全部</button>
           </div>
@@ -1071,7 +1205,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>暂时没发现 Session</strong>
-          <span>默认只看「${STATUS_TEXT.working}」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
+          <span>默认只看「${STATUS_TEXT.waiting}」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="open-settings">打开设置</button>
           </div>
@@ -1087,6 +1221,11 @@ function renderSessionRows(snapshot) {
       const detail = row.cwd || row.file || "未记录工作目录";
       const stateText = rowStateText(row);
       const stateReason = row.statusReason || stateText;
+      const workSummary = sessionWorkSummary(
+        row,
+        displayName,
+        row.statusReason || stateText
+      );
       const tokenText =
         row.tokensToday > 0
           ? ` · 今日 ${formatTokens(row.tokensToday)} tok`
@@ -1094,16 +1233,20 @@ function renderSessionRows(snapshot) {
             ? " · Token 未公开"
             : "";
       return `
-        <li class="session-row" data-id="${escapeHtml(row.id)}" tabindex="0" role="button"
-            title="${escapeHtml(stateReason)}"
-            aria-label="打开 ${escapeHtml(row.label)} ${escapeHtml(displayName)}，${escapeHtml(stateText)}">
-          <span class="status-dot ${escapeHtml(row.status)}" title="${escapeHtml(stateReason)}"></span>
+        <li class="session-row ${escapeHtml(row.status)}" data-id="${escapeHtml(row.id)}"
+            data-status="${escapeHtml(row.status)}" tabindex="0" role="button"
+            title="${escapeHtml(stateReason)}${escapeHtml(tokenText)}"
+            aria-label="打开 ${escapeHtml(row.label)} ${escapeHtml(displayName)}，${escapeHtml(stateText)}${escapeHtml(tokenText)}">
+          <span class="session-rail" aria-hidden="true"></span>
           <span class="session-copy">
-            <span class="session-title">
-              <strong>${escapeHtml(displayName)}</strong>
-              <span>${escapeHtml(row.label)} · ${escapeHtml(stateText)} · ${escapeHtml(timeAgo(row.activityAt || row.mtime))}${escapeHtml(tokenText)}</span>
+            <span class="session-identity">
+              <strong class="session-name">${escapeHtml(displayName)}</strong>
+              <span class="session-summary" title="${escapeHtml(workSummary)}">${escapeHtml(workSummary)}</span>
             </span>
-            <span class="session-path">${escapeHtml(detail)}</span>
+            <span class="session-work">
+              <span class="session-path" title="${escapeHtml(detail)}">${escapeHtml(compactDisplayPath(detail))}</span>
+              <span class="session-agent">${escapeHtml(row.label)} · ${escapeHtml(timeAgo(row.activityAt || row.mtime))}</span>
+            </span>
           </span>
           <span class="open-arrow" aria-hidden="true">›</span>
         </li>`;
@@ -1156,6 +1299,7 @@ function renderList(snapshot) {
       row.cwd,
       row.cwdName,
       row.title,
+      row.workSummary,
       row.file,
       row.tokensToday,
     ]),
@@ -1416,14 +1560,15 @@ async function tickMarket({ force = false } = {}) {
 }
 
 function syncMenuBubbleAction(collapsed) {
-  const action = document.querySelector("#menuToggleBubble span");
-  if (action) action.textContent = collapsed ? "展开气泡" : "收起气泡";
-  document.getElementById("menuToggleBubble")?.classList.toggle("will-expand", collapsed);
+  const action = document.querySelector("#menuCollapseBubble span");
+  action.textContent = collapsed ? "展开气泡" : "收起气泡";
+  document.getElementById("menuCollapseBubble").classList.toggle("will-expand", collapsed);
 }
 
 function setPetMenuOpen(open) {
   const menu = document.getElementById("petMenu");
   const button = document.getElementById("petMenuButton");
+  if (open) setActiveBubbleOverlay(null);
   menu.hidden = !open;
   button.setAttribute("aria-expanded", String(open));
   button.classList.toggle("is-active", open);
@@ -1461,7 +1606,12 @@ function maybeShowFirstRunHint(snapshot) {
 
 function toggleBubble() {
   const bubble = document.getElementById("bubble");
-  setBubbleCollapsed(!bubble.classList.contains("is-collapsed"));
+  const collapsing = !bubble.classList.contains("is-collapsed");
+  if (collapsing) {
+    setActiveBubbleOverlay(null);
+    setPetMenuOpen(false);
+  }
+  setBubbleCollapsed(collapsing);
 }
 
 function petCow() {
@@ -1746,6 +1896,12 @@ function bindMemo() {
     else closeMemoPanel();
   });
   document.getElementById("closeMemo").addEventListener("click", closeMemoPanel);
+  document.getElementById("marketButton").addEventListener("click", () => {
+    const board = document.getElementById("marketBoard");
+    if (board.hidden) openMarketPanel();
+    else closeMarketPanel();
+  });
+  document.getElementById("closeMarket").addEventListener("click", closeMarketPanel);
   document.getElementById("saveMemo").addEventListener("click", saveQuickMemo);
   document.getElementById("memoText").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -1792,6 +1948,20 @@ function syncScaleControls(nextConfig) {
   document.getElementById("bubbleScale").value = String(bubblePercent);
   document.getElementById("cowScaleValue").textContent = `${cowPercent}%`;
   document.getElementById("bubbleScaleValue").textContent = `${bubblePercent}%`;
+}
+
+function setActiveSettingsTab(tab) {
+  const next = tab === "scan" || tab === "market" ? tab : "appearance";
+  for (const button of document.querySelectorAll("[data-settings-tab]")) {
+    const selected = button.dataset.settingsTab === next;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  }
+  for (const panel of document.querySelectorAll("[data-settings-panel]")) {
+    const selected = panel.dataset.settingsPanel === next;
+    panel.hidden = !selected;
+    panel.classList.toggle("is-active", selected);
+  }
 }
 
 function fillSettings(nextConfig) {
@@ -1902,8 +2072,11 @@ function addCustomRuntime() {
 }
 
 function closeSettings() {
-  const settings = document.getElementById("settings");
-  if (settings.open) settings.close();
+  applyDisplayScale(config);
+  setSettingsMessage("修改会在保存并重扫后生效。");
+  setActiveBubbleOverlay(null);
+  syncInteractiveRegions();
+  syncMousePassthrough();
 }
 
 async function saveSettings() {
@@ -1943,14 +2116,29 @@ async function saveSettings() {
 }
 
 function bindSettings() {
-  const settings = document.getElementById("settings");
+  document.querySelector("#settings form").addEventListener("submit", (event) => {
+    event.preventDefault();
+  });
   document.getElementById("gear").addEventListener("click", () => {
     setPetMenuOpen(false);
-    closeMemoPanel();
+    if (activeBubbleOverlay === "settings") {
+      closeSettings();
+      return;
+    }
+    if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+      setBubbleCollapsed(false, { silent: true });
+    }
     fillSettings(config);
-    settings.showModal();
+    setActiveSettingsTab("appearance");
+    setActiveBubbleOverlay("settings");
+    document.querySelector('[data-settings-tab="appearance"]').focus();
     syncInteractiveRegions();
     syncMousePassthrough();
+  });
+  document.querySelector(".settings-nav").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-settings-tab]");
+    if (!button) return;
+    setActiveSettingsTab(button.dataset.settingsTab);
   });
   document.getElementById("closeSettings").addEventListener("click", closeSettings);
   document.getElementById("cancelSettings").addEventListener("click", closeSettings);
@@ -1983,16 +2171,17 @@ function bindSettings() {
     renderCustomRuntimes();
     setSettingsMessage("已从列表移除，保存后生效。");
   });
-  settings.addEventListener("close", () => {
-    applyDisplayScale(config);
-    setSettingsMessage("开启你常用的 Runtime，列表会更安静也更准确。");
-    syncInteractiveRegions();
-    syncMousePassthrough();
-  });
 }
 
 let passthroughLeaveTimer = 0;
 let interactiveRegionFrame = 0;
+const INTERACTIVE_SURFACE_IDS = [
+  "bubble",
+  "cowStage",
+  "quickMemo",
+  "marketBoard",
+  "settings",
+];
 
 function cancelPassthroughLeave() {
   window.clearTimeout(passthroughLeaveTimer);
@@ -2000,7 +2189,7 @@ function cancelPassthroughLeave() {
 }
 
 function isOverInteractiveSurface() {
-  return ["bubble", "cowStage", "quickMemo", "settings"].some((id) => {
+  return INTERACTIVE_SURFACE_IDS.some((id) => {
     const element = document.getElementById(id);
     return Boolean(element?.matches(":hover"));
   });
@@ -2009,10 +2198,9 @@ function isOverInteractiveSurface() {
 function syncInteractiveRegions() {
   window.cancelAnimationFrame(interactiveRegionFrame);
   interactiveRegionFrame = window.requestAnimationFrame(() => {
-    const regions = ["bubble", "cowStage", "quickMemo", "settings"].flatMap((id) => {
+    const regions = INTERACTIVE_SURFACE_IDS.flatMap((id) => {
       const element = document.getElementById(id);
       if (!element || element.hidden) return [];
-      if (id === "settings" && !element.open) return [];
       const style = window.getComputedStyle(element);
       if (style.display === "none" || style.visibility === "hidden") return [];
       const rect = element.getBoundingClientRect();
@@ -2041,12 +2229,7 @@ function syncMousePassthrough() {
 }
 
 function armMousePassthrough() {
-  const interactive = [
-    document.getElementById("bubble"),
-    document.getElementById("cowStage"),
-    document.getElementById("quickMemo"),
-    document.getElementById("settings"),
-  ];
+  const interactive = INTERACTIVE_SURFACE_IDS.map((id) => document.getElementById(id));
   const enter = () => {
     cancelPassthroughLeave();
     api.setIgnoreMouse(false);
@@ -2093,7 +2276,7 @@ function bindTopControls() {
     const menu = document.getElementById("petMenu");
     setPetMenuOpen(menu.hidden);
   });
-  document.getElementById("menuToggleBubble").addEventListener("click", (event) => {
+  document.getElementById("menuCollapseBubble").addEventListener("click", (event) => {
     event.stopPropagation();
     toggleBubble();
     setPetMenuOpen(false);
@@ -2103,15 +2286,21 @@ function bindTopControls() {
     setChatterEnabled(!chatterEnabled);
     setPetMenuOpen(false);
   });
-  document.getElementById("menuHideApp").addEventListener("click", async (event) => {
+  document.getElementById("menuHidePet").addEventListener("click", async (event) => {
     event.stopPropagation();
     setPetMenuOpen(false);
-    closeMemoPanel();
+    setActiveBubbleOverlay(null);
     showToast("已隐藏，按 ⌘⇧U 唤回");
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     await api.hideApp();
   });
-  document.getElementById("menuQuitApp").addEventListener("click", async (event) => {
+  document.getElementById("menuToggleTheme").addEventListener("click", (event) => {
+    event.stopPropagation();
+    const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    applyAppearance(current === "dark" ? "light" : "dark");
+    setPetMenuOpen(false);
+  });
+  document.getElementById("menuQuit").addEventListener("click", async (event) => {
     event.stopPropagation();
     showToast("桌宠已退出");
     await new Promise((resolve) => window.setTimeout(resolve, 180));
@@ -2125,12 +2314,13 @@ function bindTopControls() {
     renderRuntimeFilters(latestSnapshot.rows);
     renderSessionRows(latestSnapshot);
   });
-  document.getElementById("statusFilters").addEventListener("click", (event) => {
+  document.getElementById("summaryRail").addEventListener("click", (event) => {
     const button = event.target.closest("[data-status-filter]");
     if (!button || !latestSnapshot) return;
     activeStatusFilter = button.dataset.statusFilter;
     localStorage.setItem("niulai.statusFilter", activeStatusFilter);
     renderStatusFilters(latestSnapshot.rows);
+    renderSummary(latestSnapshot);
     renderSessionRows(latestSnapshot);
   });
   document.getElementById("list").addEventListener("click", (event) => {
@@ -2146,6 +2336,7 @@ function bindTopControls() {
       if (latestSnapshot) {
         renderRuntimeFilters(latestSnapshot.rows);
         renderStatusFilters(latestSnapshot.rows);
+        renderSummary(latestSnapshot);
         renderSessionRows(latestSnapshot);
       }
       return;
@@ -2158,12 +2349,17 @@ function bindTopControls() {
     if (!event.target.closest("#petMenu, #petMenuButton")) setPetMenuOpen(false);
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") setPetMenuOpen(false);
+    if (event.key !== "Escape") return;
+    setPetMenuOpen(false);
+    if (activeBubbleOverlay === "settings") closeSettings();
+    else setActiveBubbleOverlay(null);
   });
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
   if (!COW_SKINS.some((skin) => skin.id === currentSkinId)) currentSkinId = "original";
+  applyAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY) || "dark", { persist: false });
+  setActiveSettingsTab("appearance");
   const collapsed = localStorage.getItem("niulai.bubbleCollapsed") === "true";
   setBubbleCollapsed(collapsed, { silent: true });
   syncChatterMenu();

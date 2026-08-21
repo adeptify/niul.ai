@@ -59,6 +59,168 @@ test("Codex lifecycle distinguishes running and complete turns", (t) => {
   assert.equal(infer("codex", complete.file).status, "waiting");
 });
 
+test("completed Codex turn exposes a concrete final-answer summary", (t) => {
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "final_answer",
+        content: [
+          {
+            type: "output_text",
+            text: [
+              "改好了，我自己实看后决定保留这版：",
+              "",
+              "- 主页陪伴语合并为一行，任务状态不再换行。",
+              "- 牛记编辑区明显收短。",
+            ].join("\n"),
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const state = infer("codex", file);
+  assert.equal(state.status, "waiting");
+  assert.equal(state.waitWhy, "next");
+  assert.equal(state.completionSummary, "主页陪伴语合并为一行，任务状态不再换行。");
+});
+
+test("completed Codex turn keeps the generic fallback when no final answer exists", (t) => {
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const state = infer("codex", file);
+  assert.equal(state.completionSummary, "");
+  assert.equal(state.reason, "Codex 已完成最近一轮");
+});
+
+test("completed Codex summary skips a generic confirmation sentence", (t) => {
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "final_answer",
+        content: [
+          {
+            type: "output_text",
+            text: [
+              "已确认并正式生效。",
+              "",
+              "新 Goal：**由 Grok 修复 B3 A3 第二轮的 3 个 P1 阻断**",
+              "",
+              "状态已验证为 execution_pending。",
+            ].join("\n"),
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  assert.equal(
+    infer("codex", file).completionSummary,
+    "新 Goal：由 Grok 修复 B3 A3 第二轮的 3 个 P1 阻断"
+  );
+});
+
+test("completed Codex summary prefers product work over verification metadata", (t) => {
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "final_answer",
+        content: [
+          {
+            type: "output_text",
+            text: [
+              "- 工程验证通过：111 项测试通过。",
+              "- 完成牛记历史区的视觉分层。",
+              "- 用户验收待确认。",
+            ].join("\n"),
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  assert.equal(infer("codex", file).completionSummary, "完成牛记历史区的视觉分层。");
+});
+
+test("completed Codex summary skips a generic completion bullet", (t) => {
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "final_answer",
+        content: [
+          {
+            type: "output_text",
+            text: [
+              "- 已完成。",
+              "- 修复设置与大盘的鼠标穿透区域。",
+            ].join("\n"),
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  assert.equal(
+    infer("codex", file).completionSummary,
+    "修复设置与大盘的鼠标穿透区域。"
+  );
+});
+
+test("completed Codex summary compacts the local home path", (t) => {
+  const privatePath = path.join(os.homedir(), "Documents", "Acme-Confidential", "board.md");
+  const { dir, file } = fixture([
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "final_answer",
+        content: [
+          {
+            type: "output_text",
+            text: `- 完成 ${privatePath} 的布局调整。`,
+          },
+        ],
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete" } },
+  ]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const summary = infer("codex", file).completionSummary;
+  assert.equal(summary, "完成 ~/Documents/Acme-Confidential/board.md 的布局调整。");
+  assert.doesNotMatch(summary, new RegExp(os.userInfo().username));
+});
+
 test("missing runtime process is offline even for a hot file", (t) => {
   const { dir, file } = fixture([
     { role: "user", message: { content: [{ type: "text", text: "request" }] } },

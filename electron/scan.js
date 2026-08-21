@@ -214,7 +214,76 @@ function activity(status, reason, activityAt, confidence = "medium", label, extr
     confidence,
     waitWhy: extras.waitWhy || (status === "waiting" ? "next" : ""),
     activityLine: extras.activityLine || "",
+    completionSummary: extras.completionSummary || "",
   };
+}
+
+function codexMessageText(record) {
+  if (
+    record?.type !== "response_item" ||
+    record?.payload?.type !== "message" ||
+    record?.payload?.role !== "assistant" ||
+    record?.payload?.phase !== "final_answer"
+  ) {
+    return "";
+  }
+  return (record.payload.content || [])
+    .filter((part) => part?.type === "output_text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+function cleanCompletionLine(value) {
+  return String(value || "")
+    .replace(/^\s*(?:#{1,6}\s+|[-*•]\s+|\d+[.)]\s+)/, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(new RegExp(escapeRe(home()), "g"), "~")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function completionSummaryFromText(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((raw) => ({
+      raw,
+      bullet: /^\s*(?:[-*•]\s+|\d+[.)]\s+)/.test(raw),
+      text: cleanCompletionLine(raw),
+    }))
+    .filter((line) => line.text && !/^<\/?oai-mem-citation/i.test(line.raw));
+  const isVerification = (line) =>
+    /^(?:工程验证|产品实操|用户验收|验证状态|测试|构建|打包|未提交|没有提交)(?:通过|待|[：:]|$)/.test(
+      line.text
+    );
+  const isGenericCompletion = (line) =>
+    /^(?:改好了?|已改好|已完成(?:了)?|完成了|已确认(?:并正式生效)?|处理好了|搞定了|可以了)[。！!：:]?$/.test(
+      line.text
+    );
+  const picked =
+    lines.find(
+      (line) => line.bullet && !isVerification(line) && !isGenericCompletion(line)
+    ) || lines.find((line) => !isVerification(line) && !isGenericCompletion(line));
+  if (!picked) return "";
+  const chars = Array.from(picked.text);
+  return chars.length > 96 ? `${chars.slice(0, 95).join("")}…` : picked.text;
+}
+
+function codexCompletionSummary(records, completionIndex) {
+  let turnStart = 0;
+  for (let index = completionIndex - 1; index >= 0; index -= 1) {
+    if (records[index]?.type === "event_msg" && records[index]?.payload?.type === "task_started") {
+      turnStart = index;
+      break;
+    }
+  }
+  for (let index = completionIndex - 1; index >= turnStart; index -= 1) {
+    const text = codexMessageText(records[index]);
+    if (text) return completionSummaryFromText(text);
+  }
+  return "";
 }
 
 function toolInputObject(input) {
@@ -417,7 +486,9 @@ function inferJsonlActivity(runtime, file, { online, now, workingWindowMs }) {
     if (lifecycle === "task_started" && age <= pendingTurnMs) {
       state = activity("working", "Codex turn 已开始，尚未记录完成事件", mtime, "high");
     } else if ((lifecycle === "task_complete" || lifecycle === "turn_aborted") && age <= recentSessionMs) {
-      state = activity("waiting", "Codex 已完成最近一轮", mtime, "high");
+      state = activity("waiting", "Codex 已完成最近一轮", mtime, "high", undefined, {
+        completionSummary: codexCompletionSummary(records, lifecycleIndex),
+      });
     } else {
       const afterLifecycle = records.slice(lifecycleIndex + 1);
       if (
@@ -520,6 +591,7 @@ function session({
     statusConfidence: state.confidence,
     activityAt: state.activityAt || mtime || 0,
     title: title || "",
+    workSummary: state.completionSummary || "",
     waitWhy,
     subagentsWorking: Number(subagentsWorking) || 0,
   };

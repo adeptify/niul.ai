@@ -15,19 +15,21 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main id="pet" data-mood="waiting">
-      <section class="bubble" id="bubble" aria-label="AI Session 状态">
+    <div id="pet" data-mood="waiting">
+    <main class="bubble" id="bubble" aria-label="AI Session 状态">
         <header class="bubble-head">
-          <div class="brand-lockup" aria-label="Niul.ai">
+          <div class="brand-lockup" aria-label="牛来">
             <img src="../assets/niulai-product-logo-v1.png" alt="" />
-            <span>Niul.ai</span>
+            <span>牛来</span>
           </div>
-          <button class="status-overview" id="toggleBubble" type="button" aria-expanded="true" aria-controls="bubbleBody">
+          <p class="head-status" aria-live="polite">
             <span class="live-beacon" id="liveBeacon" title="扫描正常"><i></i></span>
-            <span id="statusLine">正在检查本机 Session</span>
-            <svg class="collapse-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
-          </button>
+            <span id="statusLine">刚刚巡视</span>
+          </p>
           <div class="head-actions">
+            <button class="icon-button" id="toggleBubble" type="button" aria-expanded="true" aria-controls="bubbleBody" aria-label="收起或展开气泡" title="收起气泡">
+              <svg class="collapse-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
+            </button>
             <button class="icon-button roll-button" id="rollCow" type="button" aria-label="随机换一只牛" title="Roll 一只牛">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="4" y="4" width="16" height="16" rx="4"></rect>
@@ -35,12 +37,18 @@
                 <circle cx="15" cy="9" r="1"></circle><circle cx="9" cy="15" r="1"></circle>
               </svg>
             </button>
-            <button class="icon-button" id="memoButton" type="button" aria-label="打开快捷记事" title="记一笔">
+            <button class="icon-button" id="memoButton" type="button" aria-pressed="false" aria-label="打开快捷记事" title="记一笔">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 3.5h9.5L19 7v13.5H6z"></path><path d="M15.5 3.5V7H19M9 11h7M9 14.5h7"></path>
               </svg>
             </button>
-            <button class="icon-button" id="gear" type="button" aria-label="配置 Runtime" title="配置 Runtime">
+            <button class="icon-button" id="marketButton" type="button" aria-pressed="false" aria-label="打开大盘" title="大盘">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 18V8"></path><path d="M10 18V5"></path><path d="M16 18v-7"></path><path d="M22 18V10"></path>
+                <path d="M3 18h19"></path>
+              </svg>
+            </button>
+            <button class="icon-button" id="gear" type="button" aria-pressed="false" aria-label="配置 Runtime" title="配置 Runtime">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 8.75a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5Z"></path>
                 <path d="M19.1 13.4a7.6 7.6 0 0 0 .05-1.4 7.6 7.6 0 0 0-.05-1.4l2-1.55-2-3.46-2.47 1a7.72 7.72 0 0 0-2.43-1.4L13.82 2h-4l-.38 3.19A7.72 7.72 0 0 0 7 6.59l-2.47-1-2 3.46 2 1.55A7.6 7.6 0 0 0 4.48 12c0 .48.02.95.07 1.4l-2 1.55 2 3.46 2.47-1a7.72 7.72 0 0 0 2.43 1.4L9.82 22h4l.38-3.19a7.72 7.72 0 0 0 2.43-1.4l2.47 1 2-3.46-2-1.55Z"></path>
@@ -56,7 +64,7 @@
           </div>
         </header>
         <div class="pet-menu" id="petMenu" role="menu" hidden>
-          <button type="button" role="menuitem" id="menuToggleBubble">
+          <button type="button" role="menuitem" id="menuCollapseBubble">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
             <span>收起气泡</span>
           </button>
@@ -64,11 +72,17 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8.5h9a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4H9l-4 3v-11Z"></path></svg>
             <span>允许牛碎嘴<small>状态变化时提醒</small></span>
           </button>
-          <button type="button" role="menuitem" id="menuHideApp">
+          <button type="button" role="menuitem" id="menuHidePet">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg>
             <span>隐藏桌宠<small>⌘⇧U 唤回</small></span>
           </button>
-          <button type="button" role="menuitem" class="danger" id="menuQuitApp">
+          <button type="button" role="menuitem" id="menuToggleTheme">
+            <span class="theme-icon theme-icon-sun" aria-hidden="true"></span>
+            <span class="theme-icon theme-icon-moon" aria-hidden="true"></span>
+            <span id="menuThemeLabel">切换到浅色</span>
+            <small id="menuThemeHint">当前为深色外观</small>
+          </button>
+          <button type="button" role="menuitem" class="danger" id="menuQuit">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 3v9"></path><path d="M6.65 6.65a7.5 7.5 0 1 0 10.7 0"></path>
             </svg>
@@ -77,35 +91,27 @@
         </div>
 
         <div class="summary-rail" id="summaryRail" aria-label="Session 汇总">
-          <span class="summary-item working"><i></i><b id="workingCount">0</b><em>拉犁</em></span>
-          <span class="summary-item waiting"><i></i><b id="waitingCount">0</b><em>停犁</em></span>
-          <span class="summary-item idle"><i></i><b id="idleCount">0</b><em>吃草</em></span>
-          <span class="summary-item offline"><i></i><b id="offlineCount">0</b><em>回棚</em></span>
+          <button type="button" data-status-filter="working" class="summary-item working" aria-pressed="false">
+            <i></i><b id="workingCount">0</b><em>拉犁</em>
+          </button>
+          <button type="button" data-status-filter="waiting" class="summary-item waiting is-priority" aria-pressed="true">
+            <i></i><b id="waitingCount">0</b><em>停犁</em>
+          </button>
+          <button type="button" data-status-filter="idle" class="summary-item idle" aria-pressed="false">
+            <i></i><b id="idleCount">0</b><em>吃草</em>
+          </button>
+          <button type="button" data-status-filter="offline" class="summary-item offline" aria-pressed="false">
+            <i></i><b id="offlineCount">0</b><em>回棚</em>
+          </button>
         </div>
 
         <div class="bubble-body" id="bubbleBody">
-          <section class="market-board" id="marketBoard" aria-labelledby="marketTitle">
-            <header class="market-board-head">
-              <div>
-                <span class="market-mark" aria-hidden="true">盘</span>
-                <strong id="marketTitle">大盘</strong>
-              </div>
-              <span class="market-meta" id="marketMeta">东方财富 · 正在看盘</span>
-            </header>
-            <div class="market-grid is-loading" id="marketGrid" aria-label="主要市场指数">
-              <span class="market-loading">正在读取中、港、美主要指数…</span>
-            </div>
-          </section>
-          <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
-            <span class="token-mark" aria-hidden="true">T</span>
-            <span class="token-copy">
-              <span>今日 Token</span>
-              <strong id="todayTokens">—</strong>
-            </span>
-            <span class="token-sources" id="tokenSources">正在读取本机用量</span>
+          <div class="companion-intro">
+            <h2 class="companion-title">我看着呢。</h2>
+            <p id="statusCaption">暂时没有任务等你回来接着走。</p>
           </div>
-          <nav class="status-filters" id="statusFilters" aria-label="按状态筛选 Session"></nav>
-          <nav class="runtime-filters" id="runtimeFilters" aria-label="按 Runtime 筛选 Session"></nav>
+          <nav class="status-filters" id="statusFilters" hidden aria-hidden="true" aria-label="按状态筛选 Session"></nav>
+          <nav class="runtime-filters" id="runtimeFilters" hidden aria-hidden="true" aria-label="按 Runtime 筛选 Session"></nav>
           <div class="list-heading">
             <span id="sessionHeading">正在拉犁</span>
             <span id="sessionTotal">0 个</span>
@@ -118,70 +124,78 @@
               <span></span><span></span><span></span>
             </li>
           </ul>
-        </div>
-        <div class="bubble-tail" aria-hidden="true"></div>
-      </section>
-
-      <div class="cow-stage" id="cowStage" role="button" tabindex="0" aria-label="牛来。单击展开状态，拖动移动，双击抚摸，右键快速记事">
-        <div class="cow-shadow" aria-hidden="true"></div>
-        <div class="cow-motion" id="cowMotion">
-          <canvas class="cow-layer is-active" id="cowA" width="420" height="420"></canvas>
-          <canvas class="cow-layer" id="cowB" width="420" height="420"></canvas>
-          <div class="cow-face-fx" aria-hidden="true">
-            <i class="cow-fx-eye is-left"></i>
-            <i class="cow-fx-eye is-right"></i>
-            <i class="cow-fx-mouth"><b></b></i>
+          <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
+            <span class="token-mark" aria-hidden="true">T</span>
+            <span class="token-copy">
+              <span>今日 Token</span>
+              <strong id="todayTokens">—</strong>
+            </span>
+            <span class="token-sources" id="tokenSources">正在读取本机用量</span>
           </div>
         </div>
-        <div class="cow-caption" id="cowCaption" role="status">哞。</div>
-        <div class="moo-marathon" id="mooMarathon" role="status" aria-live="polite" hidden>
-          <i aria-hidden="true"></i><span>哞拉松</span><time id="mooMarathonTime">05:00</time>
-        </div>
-        <span class="drag-hint" aria-hidden="true">拖我走 · 右键记事</span>
-      </div>
-      <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    </main>
 
-    <aside class="quick-memo" id="quickMemo" aria-labelledby="memoTitle" hidden>
-      <header class="memo-head">
-        <div>
-          <h2 id="memoTitle">牛记</h2>
-          <p>记在本机，到点让牛来提醒你。</p>
-        </div>
-        <button class="icon-button light" id="closeMemo" type="button" aria-label="关闭快捷记事">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
-        </button>
-      </header>
-      <textarea id="memoText" maxlength="1000" placeholder="要记住什么？"></textarea>
-      <div class="reminder-presets" aria-label="提醒时间">
-        <button type="button" class="is-active" data-remind="0">仅记录</button>
-        <button type="button" data-remind="900000">15 分钟</button>
-        <button type="button" data-remind="3600000">1 小时</button>
-        <button type="button" data-remind="tomorrow">明早 9 点</button>
-      </div>
-      <div class="memo-save-row">
-        <span id="memoMessage">未设置提醒</span>
-        <button class="button primary" id="saveMemo" type="button">记下来</button>
-      </div>
-      <div class="memo-list-heading">
-        <span>最近 Memo</span>
-        <span id="memoCount">0</span>
-      </div>
-      <div class="memo-list" id="memoList"></div>
-    </aside>
+        <section id="marketBoard" class="market-board bubble-overlay" hidden aria-labelledby="marketTitle">
+          <header class="market-board-head opaque-panel-head">
+            <div>
+              <span class="market-mark" aria-hidden="true">盘</span>
+              <strong id="marketTitle">大盘</strong>
+            </div>
+            <span class="market-meta" id="marketMeta">东方财富 · 正在看盘</span>
+            <button class="icon-button light" id="closeMarket" type="button" aria-label="关闭大盘">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+            </button>
+          </header>
+          <div class="market-grid is-loading" id="marketGrid" aria-label="主要市场指数">
+            <span class="market-loading">正在读取中、港、美主要指数…</span>
+          </div>
+        </section>
 
-    <dialog id="settings" aria-labelledby="settingsTitle">
-      <form method="dialog">
+        <aside id="quickMemo" class="quick-memo bubble-overlay" hidden aria-labelledby="memoTitle">
+          <header class="memo-head">
+            <div>
+              <h2 id="memoTitle">牛记</h2>
+              <p>记在本机，到点让牛来提醒你。</p>
+            </div>
+            <button class="icon-button light" id="closeMemo" type="button" aria-label="关闭快捷记事">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+            </button>
+          </header>
+          <textarea id="memoText" maxlength="1000" placeholder="要记住什么？"></textarea>
+          <div class="reminder-presets" aria-label="提醒时间">
+            <button type="button" class="is-active" data-remind="0">仅记录</button>
+            <button type="button" data-remind="900000">15 分钟</button>
+            <button type="button" data-remind="3600000">1 小时</button>
+            <button type="button" data-remind="tomorrow">明早 9 点</button>
+          </div>
+          <div class="memo-save-row">
+            <span id="memoMessage">未设置提醒</span>
+            <button class="button primary" id="saveMemo" type="button">记下来</button>
+          </div>
+          <section class="memo-history" aria-labelledby="memoHistoryTitle">
+            <div class="memo-list-heading">
+              <span id="memoHistoryTitle">最近 Memo</span>
+              <span id="memoCount">0</span>
+            </div>
+            <div class="memo-list" id="memoList"></div>
+          </section>
+        </aside>
+        <section id="settings" class="settings-workspace bubble-overlay" hidden aria-labelledby="settingsTitle">
+      <form>
         <header class="settings-head">
           <div>
             <h2 id="settingsTitle">桌宠设置</h2>
-            <p>调整大小、行情和牛来要巡视的 Runtime。</p>
+            <p>让牛来按你的节奏陪着。</p>
           </div>
           <button class="icon-button light" id="closeSettings" type="button" aria-label="关闭设置">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
           </button>
         </header>
-        <section class="scale-settings" aria-labelledby="scaleSettingsTitle">
+        <nav class="settings-nav">
+          <button type="button" data-settings-tab="appearance">外观与声音</button>
+          <button type="button" data-settings-tab="scan">巡视范围</button>
+          <button type="button" data-settings-tab="market">大盘</button>
+        </nav>
+        <section class="settings-panel" data-settings-panel="appearance" aria-labelledby="scaleSettingsTitle">
           <div class="section-heading">
             <div>
               <h3 id="scaleSettingsTitle">显示大小</h3>
@@ -204,7 +218,47 @@
             <input id="soundEnabled" type="checkbox" checked />
           </label>
         </section>
-        <section class="market-settings" aria-labelledby="marketSettingsTitle">
+        <section class="settings-panel" data-settings-panel="scan">
+          <div class="section-heading runtime-settings-heading">
+            <div>
+              <h3>巡视 Runtime</h3>
+              <p>只保留你正在使用的 Runtime。</p>
+            </div>
+          </div>
+          <div id="runtimeToggles" class="runtime-toggles"></div>
+          <section class="custom-runtimes" aria-labelledby="customRuntimeTitle">
+            <div class="section-heading">
+              <div>
+                <h3 id="customRuntimeTitle">其他 Runtime</h3>
+                <p>添加其他 Session 文件夹。</p>
+              </div>
+              <button class="button tertiary" id="showCustomEditor" type="button">添加</button>
+            </div>
+            <div id="customRuntimeList" class="custom-runtime-list"></div>
+            <div class="custom-editor" id="customEditor" hidden>
+              <label>
+                <span>名称</span>
+                <input id="customName" autocomplete="off" placeholder="例如：My Agent" />
+              </label>
+              <label>
+                <span>Session 文件夹</span>
+                <span class="path-picker">
+                  <input id="customPath" autocomplete="off" placeholder="选择或粘贴文件夹路径" />
+                  <button class="button secondary compact" id="pickCustomPath" type="button">选择…</button>
+                </span>
+              </label>
+              <label>
+                <span>进程名（可选）</span>
+                <input id="customProcess" autocomplete="off" placeholder="例如：my-agent" />
+              </label>
+              <div class="custom-editor-actions">
+                <button class="button secondary" id="cancelCustom" type="button">取消</button>
+                <button class="button primary" id="addCustom" type="button">加入列表</button>
+              </div>
+            </div>
+          </section>
+        </section>
+        <section class="settings-panel market-settings" data-settings-panel="market" aria-labelledby="marketSettingsTitle">
           <div class="section-heading">
             <div>
               <h3 id="marketSettingsTitle">大盘</h3>
@@ -235,51 +289,39 @@
             </div>
           </fieldset>
         </section>
-        <div class="section-heading runtime-settings-heading">
-          <div>
-            <h3>巡视 Runtime</h3>
-            <p>只保留你正在使用的 Runtime。</p>
+        <footer class="settings-footer">
+          <p class="field-help" id="settingsError">修改会在保存并重扫后生效。</p>
+          <div class="settings-actions">
+            <button class="button secondary" id="cancelSettings" type="button">取消</button>
+            <button class="button primary" id="saveSettings" type="button">保存并重扫</button>
           </div>
-        </div>
-        <div id="runtimeToggles" class="runtime-toggles"></div>
-        <section class="custom-runtimes" aria-labelledby="customRuntimeTitle">
-          <div class="section-heading">
-            <div>
-              <h3 id="customRuntimeTitle">其他 Runtime</h3>
-              <p>不在上面？添加它的 Session 文件夹即可。</p>
-            </div>
-            <button class="button tertiary" id="showCustomEditor" type="button">添加</button>
-          </div>
-          <div id="customRuntimeList" class="custom-runtime-list"></div>
-          <div class="custom-editor" id="customEditor" hidden>
-            <label>
-              <span>名称</span>
-              <input id="customName" autocomplete="off" placeholder="例如：My Agent" />
-            </label>
-            <label>
-              <span>Session 文件夹</span>
-              <span class="path-picker">
-                <input id="customPath" autocomplete="off" placeholder="选择或粘贴文件夹路径" />
-                <button class="button secondary compact" id="pickCustomPath" type="button">选择…</button>
-              </span>
-            </label>
-            <label>
-              <span>进程名（可选）</span>
-              <input id="customProcess" autocomplete="off" placeholder="例如：my-agent" />
-            </label>
-            <div class="custom-editor-actions">
-              <button class="button secondary" id="cancelCustom" type="button">取消</button>
-              <button class="button primary" id="addCustom" type="button">加入列表</button>
-            </div>
-          </div>
-        </section>
-        <p class="field-help" id="settingsError">开启你常用的 Runtime，列表会更安静也更准确。</p>
-        <div class="settings-actions">
-          <button class="button secondary" id="cancelSettings" type="button">取消</button>
-          <button class="button primary" id="saveSettings" type="button">保存并重扫</button>
-        </div>
+        </footer>
       </form>
-    </dialog>
+        </section>
+        <div class="bubble-tail" aria-hidden="true"></div>
+    <!-- /bubble -->
+    </main>
+
+      <div class="cow-stage" id="cowStage" role="button" tabindex="0" aria-label="牛来。单击展开状态，拖动移动，双击抚摸，右键快速记事">
+        <div class="cow-shadow" aria-hidden="true"></div>
+        <div class="cow-motion" id="cowMotion">
+          <canvas class="cow-layer is-active" id="cowA" width="420" height="420"></canvas>
+          <canvas class="cow-layer" id="cowB" width="420" height="420"></canvas>
+          <div class="cow-face-fx" aria-hidden="true">
+            <i class="cow-fx-eye is-left"></i>
+            <i class="cow-fx-eye is-right"></i>
+            <i class="cow-fx-mouth"><b></b></i>
+          </div>
+        </div>
+        <div class="cow-caption" id="cowCaption" role="status">哞。</div>
+        <div class="moo-marathon" id="mooMarathon" role="status" aria-live="polite" hidden>
+          <i aria-hidden="true"></i><span>哞拉松</span><time id="mooMarathonTime">05:00</time>
+        </div>
+        <span class="drag-hint" aria-hidden="true">拖我走 · 右键记事</span>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+
     <script src="mouse-passthrough.js"></script>
     <script src="grass-alert.js"></script>
     <script src="moo.js"></script>
