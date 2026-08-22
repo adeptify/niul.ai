@@ -68,6 +68,10 @@ textarea:focus-visible,
   pointer-events: none;
 }
 
+#pet[data-pet-mode="both"] {
+  width: min(680px, 100%);
+}
+
 #pet.is-cow-upper {
   justify-content: flex-start;
   padding-top: 6px;
@@ -967,6 +971,11 @@ textarea:focus-visible,
   zoom: var(--cow-scale);
 }
 
+#pet[data-pet-mode="both"] .cow-stage {
+  width: 500px;
+  height: 290px;
+}
+
 .cow-stage.is-dragging {
   cursor: grabbing;
 }
@@ -977,7 +986,8 @@ textarea:focus-visible,
   transform-origin: 50% 90%;
 }
 
-.cow-layer {
+.cow-layer,
+.horse-layer {
   position: absolute;
   inset: 0;
   display: block;
@@ -987,9 +997,92 @@ textarea:focus-visible,
   visibility: hidden;
 }
 
-.cow-layer.is-active {
+.cow-layer.is-active,
+.horse-layer.is-active {
   opacity: 1;
   visibility: visible;
+}
+
+.horse-actor {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+}
+
+.horse-motion {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 90%;
+}
+
+.horse-face-fx {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.horse-fx-mouth {
+  position: absolute;
+  top: 35.5%;
+  left: 55.5%;
+  display: block;
+  width: 15%;
+  aspect-ratio: 2.25;
+  overflow: hidden;
+  border: 2px solid #58445f;
+  border-radius: 45% 52% 50% 46%;
+  background: #281d2d;
+  opacity: 0;
+  transform: rotate(-1.5deg) scaleY(0.16);
+  transform-origin: 50% 18%;
+}
+
+.horse-fx-mouth b {
+  position: absolute;
+  right: 8%;
+  bottom: -10%;
+  left: 8%;
+  height: 48%;
+  border-radius: 50% 50% 34% 34%;
+  background: #9f717f;
+}
+
+#pet[data-expression="turning"] .horse-fx-mouth,
+#pet[data-expression^="attention"] .horse-fx-mouth {
+  top: 29.5%;
+  left: 55.8%;
+  width: 13%;
+}
+
+#pet[data-pet-mode="horse"] .cow-stage > .cow-motion,
+#pet[data-pet-mode="horse"] .cow-stage > .cow-shadow {
+  display: none;
+}
+
+#pet[data-pet-mode="horse"] .horse-actor,
+#pet[data-pet-mode="both"] .horse-actor {
+  display: block;
+}
+
+#pet[data-pet-mode="both"] .horse-actor {
+  inset: 10px auto auto 0;
+  width: 270px;
+  height: 270px;
+}
+
+#pet[data-pet-mode="both"] .cow-stage > .cow-motion {
+  inset: 10px 0 auto auto;
+  width: 270px;
+  height: 270px;
+}
+
+#pet[data-pet-mode="both"] .cow-stage > .cow-shadow {
+  right: 74px;
+  left: auto;
+  bottom: 21px;
+  width: 100px;
 }
 
 .cow-face-fx {
@@ -1098,15 +1191,18 @@ textarea:focus-visible,
   animation: cowFallbackMouth 270ms ease-in-out infinite;
 }
 
-#pet[data-mood="waiting"] .cow-stage.is-ambient-moving .cow-motion {
+#pet[data-mood="waiting"] .cow-stage.is-ambient-moving .cow-motion,
+#pet[data-mood="waiting"] .cow-stage.is-ambient-moving .horse-motion {
   animation: cowIdle 1.1s ease-in-out;
 }
 
-#pet[data-mood="working"] .cow-stage.is-ambient-moving .cow-motion {
+#pet[data-mood="working"] .cow-stage.is-ambient-moving .cow-motion,
+#pet[data-mood="working"] .cow-stage.is-ambient-moving .horse-motion {
   animation: cowWorking 900ms ease-in-out;
 }
 
-#pet[data-mood="offline"] .cow-stage.is-ambient-moving .cow-motion {
+#pet[data-mood="offline"] .cow-stage.is-ambient-moving .cow-motion,
+#pet[data-mood="offline"] .cow-stage.is-ambient-moving .horse-motion {
   animation: cowOffline 1.2s ease-in-out;
 }
 
@@ -1126,11 +1222,13 @@ textarea:focus-visible,
   animation: cowFootball 1.5s ease-in-out;
 }
 
-#pet .cow-stage.is-state-changing .cow-motion {
+#pet .cow-stage.is-state-changing .cow-motion,
+#pet .cow-stage.is-state-changing .horse-motion {
   animation: cowNotice 420ms var(--ease-out);
 }
 
-#pet .cow-stage.is-petted .cow-motion {
+#pet .cow-stage.is-petted .cow-motion,
+#pet .cow-stage.is-petted .horse-motion {
   animation: cowPet 680ms var(--ease-out);
 }
 
@@ -1138,19 +1236,23 @@ textarea:focus-visible,
   animation: cowRoll 560ms var(--ease-out);
 }
 
-#pet.is-observing-session .cow-stage .cow-motion {
+#pet.is-observing-session .cow-stage .cow-motion,
+#pet.is-observing-session .cow-stage .horse-motion {
   animation: none;
 }
 
-#pet .cow-stage.is-speaking .cow-motion {
+#pet .cow-stage.is-speaking .cow-motion,
+#pet .cow-stage.is-speaking .horse-motion {
   animation: cowTalkBody 540ms ease-in-out infinite;
 }
 
-#pet .cow-stage.is-speaking.is-state-changing .cow-motion {
+#pet .cow-stage.is-speaking.is-state-changing .cow-motion,
+#pet .cow-stage.is-speaking.is-state-changing .horse-motion {
   animation: cowNotice 420ms var(--ease-out);
 }
 
-#pet .cow-stage.is-speaking.is-petted .cow-motion {
+#pet .cow-stage.is-speaking.is-petted .cow-motion,
+#pet .cow-stage.is-speaking.is-petted .horse-motion {
   animation: cowPet 680ms var(--ease-out);
 }
 
@@ -1170,9 +1272,16 @@ textarea:focus-visible,
   animation: cowFallbackLookTalk 540ms ease-in-out infinite;
 }
 
-#pet .cow-stage.is-dragging .cow-motion {
+#pet .cow-stage.is-dragging .cow-motion,
+#pet .cow-stage.is-dragging .horse-motion {
   animation: none;
   transform: translate3d(var(--look-x), 3px, 0) rotate(-1.5deg) scale(0.98);
+}
+
+#pet[data-pet-mode="horse"] .cow-stage.is-speaking .horse-fx-mouth,
+#pet[data-pet-mode="both"] .cow-stage.is-speaking .horse-fx-mouth {
+  opacity: 1;
+  animation: horseMouthTalk 270ms ease-in-out infinite;
 }
 
 .cow-shadow {
@@ -1193,6 +1302,30 @@ textarea:focus-visible,
 #pet[data-mood="working"] .cow-shadow {
   width: 100px;
   opacity: 0.82;
+}
+
+.horse-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 23px;
+  width: 116px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(31, 22, 10, 0.22);
+  filter: blur(3px);
+  opacity: 0.82;
+  transform: translateX(-50%);
+}
+
+#pet[data-pet-mode="both"] .cow-caption {
+  top: 8px;
+  right: -48px;
+  max-width: 174px;
+}
+
+#pet[data-pet-mode="both"].is-pet-scale-large .cow-caption {
+  right: 0;
+  max-width: 130px;
 }
 
 .cow-caption {
@@ -2102,11 +2235,13 @@ input::placeholder {
   }
 }
 
-#pet .cow-stage.is-market-reacting-up .cow-motion {
+#pet .cow-stage.is-market-reacting-up .cow-motion,
+#pet .cow-stage.is-market-reacting-up .horse-motion {
   animation: cowMarketUp 760ms var(--ease-out);
 }
 
-#pet .cow-stage.is-market-reacting-down .cow-motion {
+#pet .cow-stage.is-market-reacting-down .cow-motion,
+#pet .cow-stage.is-market-reacting-down .horse-motion {
   animation: cowMarketDown 760ms var(--ease-out);
 }
 
@@ -2186,6 +2321,16 @@ input::placeholder {
   }
   48% {
     transform: translate(-50%, -50%) scaleY(1);
+  }
+}
+
+@keyframes horseMouthTalk {
+  0%,
+  100% {
+    transform: rotate(-1.5deg) scaleY(0.22);
+  }
+  48% {
+    transform: rotate(-0.5deg) scaleY(1);
   }
 }
 
@@ -3490,6 +3635,98 @@ textarea::placeholder {
   align-content: start;
 }
 
+.pet-mode-settings {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 6px;
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pet-mode-settings legend {
+  padding: 0;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pet-mode-settings > p {
+  margin: 0;
+  color: var(--bone-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pet-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--paper-deep);
+}
+
+.pet-mode-options label {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.pet-mode-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.pet-mode-options span {
+  display: grid;
+  min-height: 49px;
+  place-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: 9px;
+  color: var(--bone-muted);
+  text-align: center;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.pet-mode-options strong,
+.pet-mode-options small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pet-mode-options strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pet-mode-options small {
+  font-size: 10px;
+}
+
+.pet-mode-options label:hover span {
+  color: var(--bone);
+}
+
+.pet-mode-options input:checked + span {
+  background: var(--tag-soft);
+  box-shadow: 0 2px 8px rgba(19, 15, 9, 0.22);
+  color: var(--speech-text);
+}
+
+.pet-mode-options input:focus-visible + span {
+  outline: 2px solid var(--tag-bright);
+  outline-offset: 2px;
+}
+
 .scale-settings,
 .market-settings,
 .custom-runtimes,
@@ -3559,6 +3796,11 @@ textarea::placeholder {
 .scale-control input[type="range"],
 .market-sensitivity input {
   accent-color: var(--tag);
+}
+
+.roll-button:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
 }
 
 .provider-label {

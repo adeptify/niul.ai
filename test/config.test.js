@@ -19,7 +19,8 @@ test("upgrades the legacy scan interval without resetting user preferences", () 
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 6);
+  assert.equal(config.configVersion, 7);
+  assert.equal(config.petMode, "cow");
   assert.equal(config.pollMs, 5000);
   assert.equal(config.cowScale, 1.35);
   assert.equal(config.bubbleScale, 0.9);

@@ -45,6 +45,7 @@ function loadConfig(userDataDir) {
       "maxOfflineAgeMs",
       "maxSessions",
       "maxSessionsPerRuntime",
+      "petMode",
       "cowScale",
       "bubbleScale",
       "soundEnabled",

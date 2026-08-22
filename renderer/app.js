@@ -149,6 +149,7 @@ const COW_SKINS = [
   {
     id: "old-friend",
     name: "不是牛来的牛",
+    bothCompatible: false,
     src: {
       working: "../assets/cow-working.png",
       waiting: "../assets/cow-waiting.png",
@@ -160,6 +161,22 @@ const COW_SKINS = [
     },
   },
 ];
+
+const HORSE_CHARACTER = {
+  name: "马来",
+  src: "../assets/malai-neutral-v1.png",
+  expressions: {
+    attention: "../assets/malai-attention-v1.png",
+    turning: "../assets/malai-attention-v1.png",
+    blink: "../assets/malai-blink-v1.png",
+  },
+};
+
+const {
+  normalizePetMode,
+  petModeProfile,
+  prefixPetSpeech,
+} = window.niulPetMode;
 
 const MOOD_COPY = {
   working: (counts) => `${counts.working} 头在拉犁`,
@@ -173,6 +190,7 @@ const MOOD_COPY = {
 
 const PREVIEW_CONFIG = {
   pollMs: 5000,
+  petMode: "cow",
   cowScale: 1,
   bubbleScale: 1,
   soundEnabled: true,
@@ -332,10 +350,12 @@ function previewApi() {
 const api = window.niulai || previewApi();
 const imageCache = new Map();
 const processedImageCache = new Map();
-let activeCanvas = "cowA";
-let currentFrameSource = "";
-let frameRequestId = 0;
+const characterFrames = {
+  cow: { activeCanvas: "cowA", source: "", requestId: 0, canvases: ["cowA", "cowB"] },
+  horse: { activeCanvas: "horseA", source: "", requestId: 0, canvases: ["horseA", "horseB"] },
+};
 let mood = "";
+let petMode = "cow";
 let currentSkinId = localStorage.getItem("niulai.cowSkin") || "original";
 let activeRuntimeFilter = "all";
 localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
@@ -482,20 +502,30 @@ function applyFaceProfile(skin) {
   stage.style.setProperty("--face-mouth-width", `${mouthWidth}%`);
 }
 
-async function swapCowFrame(src) {
-  const requestId = ++frameRequestId;
-  if (!src || src === currentFrameSource) return false;
+async function swapCharacterFrame(character, src) {
+  const state = characterFrames[character];
+  if (!state) return false;
+  const requestId = ++state.requestId;
+  if (!src || src === state.source) return false;
   const prepared = await prepareCowFrame(src);
-  if (requestId !== frameRequestId) return false;
-  const nextCanvas = activeCanvas === "cowA" ? "cowB" : "cowA";
+  if (requestId !== state.requestId) return false;
+  const nextCanvas = state.activeCanvas === state.canvases[0] ? state.canvases[1] : state.canvases[0];
   const incoming = document.getElementById(nextCanvas);
-  const outgoing = document.getElementById(activeCanvas);
+  const outgoing = document.getElementById(state.activeCanvas);
   drawPreparedFrame(prepared, incoming);
   incoming.classList.add("is-active");
   outgoing.classList.remove("is-active");
-  activeCanvas = nextCanvas;
-  currentFrameSource = src;
+  state.activeCanvas = nextCanvas;
+  state.source = src;
   return true;
+}
+
+function swapCowFrame(src) {
+  return swapCharacterFrame("cow", src);
+}
+
+function swapHorseFrame(src) {
+  return swapCharacterFrame("horse", src);
 }
 
 async function setCowExpression(expression = "base") {
@@ -508,13 +538,71 @@ async function setCowExpression(expression = "base") {
   document.getElementById("pet").dataset.expression = expression;
 }
 
+function horseExpressionSource(expression) {
+  if (expression === "blink") return HORSE_CHARACTER.expressions.blink;
+  if (expression === "attention" || expression === "turning" || expression.startsWith("attention-")) {
+    return HORSE_CHARACTER.expressions.attention;
+  }
+  return HORSE_CHARACTER.src;
+}
+
+async function setHorseExpression(expression = "base") {
+  await swapHorseFrame(horseExpressionSource(expression));
+}
+
+function activePetProfile() {
+  return petModeProfile(petMode);
+}
+
+function setPetExpression(expression = "base") {
+  const profile = activePetProfile();
+  const updates = [];
+  if (profile.includesCow) updates.push(setCowExpression(expression));
+  if (profile.includesHorse) updates.push(setHorseExpression(expression));
+  document.getElementById("pet").dataset.expression = expression;
+  return Promise.all(updates);
+}
+
+function syncRollControl() {
+  const button = document.getElementById("rollCow");
+  if (!button) return;
+  const available = activePetProfile().includesCow;
+  button.disabled = !available;
+  button.setAttribute("aria-disabled", String(!available));
+  button.setAttribute("aria-label", available ? "随机换一只牛" : "马模式暂无其他造型");
+  button.title = available ? "Roll 一只牛" : "马模式暂无其他造型";
+}
+
+async function applyPetMode(nextMode) {
+  petMode = normalizePetMode(nextMode);
+  if (petMode === "both" && currentSkin().bothCompatible === false) {
+    currentSkinId = "original";
+    localStorage.setItem("niulai.cowSkin", currentSkinId);
+  }
+  const profile = activePetProfile();
+  const pet = document.getElementById("pet");
+  const stage = document.getElementById("cowStage");
+  pet.dataset.petMode = petMode;
+  stage.setAttribute(
+    "aria-label",
+    `${profile.subject}桌宠。单击展开状态，拖动移动，双击抚摸，右键快速记事`
+  );
+  document.getElementById("horseActor").setAttribute("aria-hidden", String(!profile.includesHorse));
+  applyFaceProfile(currentSkin());
+  syncRollControl();
+  syncChatterMenu();
+  syncMooMarathon();
+  await setPetExpression(restingCowExpression());
+  requestAnimationFrame(syncInteractiveRegions);
+}
+
 async function setCow(nextMood, force = false) {
   if (!force && mood === nextMood) return;
   const previousMood = mood;
   mood = nextMood;
   const skin = currentSkin();
   applyFaceProfile(skin);
-  await swapCowFrame(cowSource(skin, mood));
+  if (activePetProfile().includesCow) await swapCowFrame(cowSource(skin, mood));
   const pet = document.getElementById("pet");
   pet.dataset.mood = mood;
   pet.dataset.skin = currentSkinId;
@@ -531,7 +619,12 @@ async function setCow(nextMood, force = false) {
 }
 
 async function rollCow() {
-  const candidates = COW_SKINS.filter((skin) => skin.id !== currentSkinId);
+  if (!activePetProfile().includesCow) return;
+  const candidates = COW_SKINS.filter(
+    (skin) =>
+      skin.id !== currentSkinId &&
+      (petMode !== "both" || skin.bothCompatible !== false)
+  );
   const next = candidates[Math.floor(Math.random() * candidates.length)] || COW_SKINS[0];
   const button = document.getElementById("rollCow");
   const stage = document.getElementById("cowStage");
@@ -813,7 +906,7 @@ function flushMarketReaction() {
   showCaption(`${marketReactionCopy(event)}${suffix}`, 3600, {
     speechDuration: event.band >= 1 ? 1300 : 900,
   });
-  if (event.band >= 1) playCowMoo("short");
+  if (event.band >= 1) playPetVoice("short");
 }
 
 function queueMarketReaction(event) {
@@ -825,8 +918,18 @@ function queueMarketReaction(event) {
 }
 
 function spokenText(message) {
-  const text = String(message || "").trim();
-  return /^哞/.test(text) ? text : `哞，${text}`;
+  return prefixPetSpeech(petMode, message);
+}
+
+function playPetVoice(kind = "medium") {
+  const profile = activePetProfile();
+  if (profile.includesCow && profile.includesHorse) {
+    playCowMoo(kind, 0, 0.68);
+    playHorseNeigh(kind, 0.06, 0.64);
+    return;
+  }
+  if (profile.includesCow) playCowMoo(kind);
+  if (profile.includesHorse) playHorseNeigh(kind);
 }
 
 function restingCowExpression() {
@@ -844,7 +947,7 @@ function stopSpeaking({ restore = true } = {}) {
   const stage = document.getElementById("cowStage");
   stage?.classList.remove("is-speaking");
   if (restore && stage) {
-    setCowExpression(restingCowExpression());
+    setPetExpression(restingCowExpression());
   }
   scheduleBlink();
 }
@@ -860,11 +963,11 @@ function startSpeaking(duration, attention = false) {
     ? ["attention-speaking-half", "attention-speaking", "attention-speaking-half", "attention"]
     : ["speaking-half", "speaking", "speaking-half", "base"];
   let frame = 0;
-  setCowExpression(frames[frame]);
+  setPetExpression(frames[frame]);
   if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     speakingTimer = window.setInterval(() => {
       frame = (frame + 1) % frames.length;
-      setCowExpression(frames[frame]);
+      setPetExpression(frames[frame]);
     }, 135);
   }
   if (duration > 0) {
@@ -876,14 +979,18 @@ function scheduleBlink() {
   window.clearTimeout(blinkTimer);
   blinkTimer = window.setTimeout(async () => {
     const stage = document.getElementById("cowStage");
+    const profile = activePetProfile();
+    const canBlink =
+      (profile.includesCow && Boolean(currentSkin().expressions?.blink)) ||
+      profile.includesHorse;
     if (
-      currentSkin().expressions?.blink &&
+      canBlink &&
       !stage.classList.contains("is-speaking") &&
       !stage.classList.contains("is-observing-session") &&
       !document.getElementById("pet")?.classList.contains("is-wait-attention")
     ) {
-      await setCowExpression("blink");
-      window.setTimeout(() => setCowExpression(restingCowExpression()), 135);
+      await setPetExpression("blink");
+      window.setTimeout(() => setPetExpression(restingCowExpression()), 135);
     }
     scheduleBlink();
   }, 4200 + Math.random() * 3600);
@@ -1352,7 +1459,7 @@ function pointCowAt(element) {
     const observedId = String(row.id);
     stage.dataset.observingId = observedId;
     window.clearTimeout(attentionTimer);
-    setCowExpression("turning");
+    setPetExpression("turning");
     attentionTimer = window.setTimeout(() => {
       if (stage.dataset.observingId !== observedId) return;
       const line =
@@ -1384,7 +1491,7 @@ function pointCowAtMarket(element) {
   const observedId = `market:${quote.id}`;
   stage.dataset.observingId = observedId;
   window.clearTimeout(attentionTimer);
-  setCowExpression("turning");
+  setPetExpression("turning");
   attentionTimer = window.setTimeout(() => {
     if (stage.dataset.observingId !== observedId) return;
     const direction = marketDirection(quote.changePct);
@@ -1486,7 +1593,7 @@ function syncWaitAttention(rows) {
   pet?.classList.toggle("is-wait-attention", urgent);
   const stage = document.getElementById("cowStage");
   if (!stage?.classList.contains("is-speaking")) {
-    setCowExpression(restingCowExpression());
+    setPetExpression(restingCowExpression());
   }
 }
 
@@ -1598,7 +1705,7 @@ function maybeShowFirstRunHint(snapshot) {
   markPriorityBusy(4200);
   showCaption(
     hasWorking
-      ? "牛来看着这些 Session。⌘⇧U 可隐藏。"
+      ? "桌宠看着这些 Session。⌘⇧U 可隐藏。"
       : "先打开一个 Runtime。点齿轮可开关扫描，⌘⇧U 可隐藏。",
     4200
   );
@@ -1618,8 +1725,9 @@ function petCow() {
   const stage = document.getElementById("cowStage");
   stage.classList.remove("is-petted");
   requestAnimationFrame(() => stage.classList.add("is-petted"));
-  showCaption(mood === "working" ? "拉着犁呢，也可以摸一下。" : "哞～", 1800);
-  playCowMoo(mood === "working" ? "short" : "medium");
+  const restingLine = petMode === "horse" ? "咴～" : petMode === "both" ? "哞咴～" : "哞～";
+  showCaption(mood === "working" ? "盯着活呢，也可以摸一下。" : restingLine, 1800);
+  playPetVoice(mood === "working" ? "short" : "medium");
   window.setTimeout(() => stage.classList.remove("is-petted"), 720);
 }
 
@@ -1635,6 +1743,32 @@ const MOO_MARATHON_LINES = [
   "哞，没事，我练嗓子。",
   "哞，这也是一种 Runtime。",
 ];
+const HORSE_MARATHON_LINES = [
+  "咴。",
+  "咴咴。",
+  "咴——",
+  "咴？",
+  "咴，还在跑。",
+  "咴，配速正常。",
+  "咴，没事，我练嗓子。",
+  "咴，这才叫马拉松。",
+];
+const BOTH_MARATHON_LINES = [
+  "哞咴。",
+  "哞——咴！",
+  "哞咴？",
+  "哞咴，还在跑。",
+  "哞咴，牛马都在。",
+  "哞咴，双声道正常。",
+  "哞咴，这也是一种协作。",
+  "哞咴，谁也别先停。",
+];
+
+function marathonLines() {
+  if (petMode === "horse") return HORSE_MARATHON_LINES;
+  if (petMode === "both") return BOTH_MARATHON_LINES;
+  return MOO_MARATHON_LINES;
+}
 
 function syncChatterMenu() {
   const button = document.getElementById("menuToggleChatter");
@@ -1642,9 +1776,10 @@ function syncChatterMenu() {
   button.setAttribute("aria-checked", String(chatterEnabled));
   const copy = button.querySelector("span");
   if (copy) {
+    const subject = activePetProfile().subject;
     copy.innerHTML = chatterEnabled
-      ? "允许牛碎嘴<small>状态变化时提醒</small>"
-      : "让牛开口<small>当前只报重要提醒</small>";
+      ? `允许${subject}碎嘴<small>状态变化时提醒</small>`
+      : `让${subject}开口<small>当前只报重要提醒</small>`;
   }
 }
 
@@ -1669,6 +1804,7 @@ function syncMooMarathon() {
   const running = mooMarathonEndsAt > Date.now();
   badge.hidden = !running;
   document.getElementById("cowStage")?.classList.toggle("is-moo-marathon", running);
+  document.getElementById("marathonLabel").textContent = activePetProfile().marathonLabel;
   if (running) document.getElementById("mooMarathonTime").textContent = marathonRemainingText();
 }
 
@@ -1679,9 +1815,10 @@ function mooMarathonBeat() {
     return;
   }
   syncMooMarathon();
-  const line = MOO_MARATHON_LINES[Math.floor(Math.random() * MOO_MARATHON_LINES.length)];
+  const lines = marathonLines();
+  const line = lines[Math.floor(Math.random() * lines.length)];
   showCaption(line, 2600, { speechDuration: 1050 });
-  playCowMoo(mooKindForLine(line));
+  playPetVoice(petMode === "horse" ? horseKindForLine(line) : mooKindForLine(line));
 }
 
 function stopMooMarathon(announce = true) {
@@ -1690,16 +1827,16 @@ function stopMooMarathon(announce = true) {
   mooMarathonEndsAt = 0;
   syncMooMarathon();
   if (announce) {
-    showCaption("哞，哞拉松结束，嗓子还在。", 2300);
-    playCowMoo("medium");
+    showCaption(`${activePetProfile().marathonLabel}结束，嗓子还在。`, 2300);
+    playPetVoice("medium");
   }
 }
 
 function toggleMooMarathon() {
   if (mooMarathonEndsAt > Date.now()) {
     stopMooMarathon(false);
-    showCaption("哞，紧急闭嘴成功。", 2000);
-    playCowMoo("short");
+    showCaption("紧急闭嘴成功。", 2000);
+    playPetVoice("short");
     return;
   }
   if (!chatterEnabled) {
@@ -1707,10 +1844,10 @@ function toggleMooMarathon() {
   }
   mooMarathonEndsAt = Date.now() + MOO_MARATHON_MS;
   syncMooMarathon();
-  showCaption("哞，五分钟哞拉松，开跑。再连点五下就闭嘴。", 4200, {
+  showCaption(`五分钟${activePetProfile().marathonLabel}，开跑。再连点五下就闭嘴。`, 4200, {
     speechDuration: 1500,
   });
-  playCowMoo("long");
+  playPetVoice("long");
   mooMarathonTimer = window.setInterval(mooMarathonBeat, MOO_MARATHON_BEAT_MS);
   mooCountdownTimer = window.setInterval(syncMooMarathon, 1000);
 }
@@ -1816,7 +1953,7 @@ function bindCowInteraction() {
 
   stage.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    armCowAudio();
+    armPetAudio();
     stage.setPointerCapture(event.pointerId);
     pointerDown = {
       pointerId: event.pointerId,
@@ -1937,8 +2074,10 @@ function normalizedScale(value, fallback = 1) {
 
 function applyDisplayScale(nextConfig) {
   const pet = document.getElementById("pet");
-  pet.style.setProperty("--cow-scale", String(normalizedScale(nextConfig?.cowScale)));
+  const cowScale = normalizedScale(nextConfig?.cowScale);
+  pet.style.setProperty("--cow-scale", String(cowScale));
   pet.style.setProperty("--bubble-scale", String(normalizedScale(nextConfig?.bubbleScale)));
+  pet.classList.toggle("is-pet-scale-large", cowScale > 1.1);
 }
 
 function syncScaleControls(nextConfig) {
@@ -1978,6 +2117,9 @@ function fillSettings(nextConfig) {
         </label>`
     )
     .join("");
+  const mode = normalizePetMode(nextConfig.petMode);
+  const modeInput = document.querySelector(`input[name="petMode"][value="${CSS.escape(mode)}"]`);
+  if (modeInput) modeInput.checked = true;
   syncScaleControls(nextConfig);
   document.getElementById("soundEnabled").checked = nextConfig.soundEnabled !== false;
   const market = nextConfig.market || {};
@@ -2073,6 +2215,7 @@ function addCustomRuntime() {
 
 function closeSettings() {
   applyDisplayScale(config);
+  applyPetMode(config.petMode);
   setSettingsMessage("修改会在保存并重扫后生效。");
   setActiveBubbleOverlay(null);
   syncInteractiveRegions();
@@ -2086,6 +2229,9 @@ async function saveSettings() {
   }
   next.cowScale = Number(document.getElementById("cowScale").value) / 100;
   next.bubbleScale = Number(document.getElementById("bubbleScale").value) / 100;
+  next.petMode = normalizePetMode(
+    document.querySelector('input[name="petMode"]:checked')?.value
+  );
   next.soundEnabled = document.getElementById("soundEnabled").checked;
   next.market = {
     ...(next.market || {}),
@@ -2100,6 +2246,7 @@ async function saveSettings() {
   setSettingsMessage("正在保存…");
   config = await api.saveConfig(next);
   setCowSoundEnabled(config.soundEnabled !== false);
+  await applyPetMode(config.petMode);
   applyDisplayScale(config);
   if (config.market?.enabled === false || config.market?.reactionsEnabled === false) {
     pendingMarketReaction = null;
@@ -2147,6 +2294,11 @@ function bindSettings() {
     "change",
     syncMarketSettingsAvailability
   );
+  for (const input of document.querySelectorAll('input[name="petMode"]')) {
+    input.addEventListener("change", () => {
+      if (input.checked) applyPetMode(input.value);
+    });
+  }
   document.getElementById("showCustomEditor").addEventListener("click", showCustomEditor);
   document.getElementById("cancelCustom").addEventListener("click", hideCustomEditor);
   document.getElementById("addCustom").addEventListener("click", addCustomRuntime);
@@ -2377,6 +2529,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await setCow("waiting", true);
   config = await api.getConfig();
   setCowSoundEnabled(config.soundEnabled !== false);
+  await applyPetMode(config.petMode);
   applyDisplayScale(config);
   fillSettings(config);
   await tick();

@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "renderer/index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "renderer/styles.css"), "utf8");
 const js = fs.readFileSync(path.join(root, "renderer/app.js"), "utf8");
+const audioJs = fs.readFileSync(path.join(root, "renderer/moo.js"), "utf8");
 
 function extract(source, start, end) {
   const i = source.indexOf(start);
@@ -321,10 +322,35 @@ test("settings labels match the approved A demo", () => {
   assert.match(html, /data-settings-tab="appearance"[^>]*>外观与声音</);
   assert.match(html, /data-settings-tab="scan"[^>]*>巡视范围</);
   assert.match(html, /data-settings-tab="market"[^>]*>大盘</);
-  assert.ok(html.includes("让牛来按你的节奏陪着。"));
+  assert.ok(html.includes("让牛来、马来，或者它们一起陪着。"));
   assert.ok(html.includes('data-settings-tab="appearance"'));
   assert.ok(html.includes('data-settings-tab="scan"'));
   assert.ok(html.includes('data-settings-tab="market"'));
+});
+
+test("appearance settings expose cow horse and combined pet modes", () => {
+  assert.match(html, /name="petMode"\s+value="cow"/);
+  assert.match(html, /name="petMode"\s+value="horse"/);
+  assert.match(html, /name="petMode"\s+value="both"/);
+  assert.ok(html.includes('id="horseActor"'));
+  assert.ok(html.includes('id="horseA"'));
+  assert.ok(html.includes('id="horseB"'));
+  assert.ok(html.includes('src="pet-mode.js"'));
+});
+
+test("horse mode shares speaking frames while combined mode mixes both calls", () => {
+  assert.match(css, /\.cow-stage\.is-speaking \.horse-fx-mouth/);
+  assert.match(css, /data-expression\^="attention"[^}]*\.horse-fx-mouth\s*\{[^}]*top\s*:\s*29\.5%/);
+  const speaking = extract(js, "function startSpeaking", "function scheduleBlink");
+  assert.match(speaking, /setPetExpression/);
+  const voices = extract(js, "function playPetVoice", "function restingCowExpression");
+  assert.match(voices, /playCowMoo/);
+  assert.match(voices, /playHorseNeigh/);
+  assert.match(voices, /profile\.includesCow && profile\.includesHorse/);
+  const horseKinds = extract(audioJs, "function horseKindForLine", "return \"medium\";");
+  assert.match(horseKinds, /咴咴/);
+  assert.match(horseKinds, /"short"/);
+  assert.match(js, /petMode !== "both" \|\| skin\.bothCompatible !== false/);
 });
 
 test("theme menu hint describes the current appearance", () => {

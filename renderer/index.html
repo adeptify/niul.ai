@@ -184,7 +184,7 @@
         <header class="settings-head">
           <div>
             <h2 id="settingsTitle">桌宠设置</h2>
-            <p>让牛来按你的节奏陪着。</p>
+            <p>让牛来、马来，或者它们一起陪着。</p>
           </div>
           <button class="icon-button light" id="closeSettings" type="button" aria-label="关闭设置">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
@@ -196,14 +196,32 @@
           <button type="button" data-settings-tab="market">大盘</button>
         </nav>
         <section class="settings-panel" data-settings-panel="appearance" aria-labelledby="scaleSettingsTitle">
+          <fieldset class="pet-mode-settings">
+            <legend>桌宠组合</legend>
+            <p>切换后，状态、拖动、说话和五连点彩蛋会一起换角色。</p>
+            <div class="pet-mode-options">
+              <label>
+                <input type="radio" name="petMode" value="cow" checked />
+                <span><strong>牛模式</strong><small>只有牛来</small></span>
+              </label>
+              <label>
+                <input type="radio" name="petMode" value="horse" />
+                <span><strong>马模式</strong><small>只有马来</small></span>
+              </label>
+              <label>
+                <input type="radio" name="petMode" value="both" />
+                <span><strong>牛马模式</strong><small>马左牛右</small></span>
+              </label>
+            </div>
+          </fieldset>
           <div class="section-heading">
             <div>
               <h3 id="scaleSettingsTitle">显示大小</h3>
-              <p>牛和 Session 气泡可分别缩放。</p>
+              <p>桌宠和 Session 气泡可分别缩放。</p>
             </div>
           </div>
           <label class="scale-control">
-            <span>牛来 <output id="cowScaleValue">100%</output></span>
+            <span>桌宠 <output id="cowScaleValue">100%</output></span>
             <input id="cowScale" type="range" min="70" max="130" step="5" value="100" />
           </label>
           <label class="scale-control">
@@ -212,8 +230,8 @@
           </label>
           <label class="preference-toggle">
             <span>
-              <strong>播放牛叫声</strong>
-              <small>关闭后保留文字提醒和牛的动作。</small>
+              <strong>播放角色叫声</strong>
+              <small>关闭后保留文字提醒和角色动作。</small>
             </span>
             <input id="soundEnabled" type="checkbox" checked />
           </label>
@@ -313,9 +331,19 @@
             <i class="cow-fx-mouth"><b></b></i>
           </div>
         </div>
+        <div class="horse-actor" id="horseActor" aria-hidden="true">
+          <div class="horse-shadow" aria-hidden="true"></div>
+          <div class="horse-motion" id="horseMotion">
+            <canvas class="horse-layer is-active" id="horseA" width="420" height="420"></canvas>
+            <canvas class="horse-layer" id="horseB" width="420" height="420"></canvas>
+            <div class="horse-face-fx" aria-hidden="true">
+              <i class="horse-fx-mouth"><b></b></i>
+            </div>
+          </div>
+        </div>
         <div class="cow-caption" id="cowCaption" role="status">哞。</div>
         <div class="moo-marathon" id="mooMarathon" role="status" aria-live="polite" hidden>
-          <i aria-hidden="true"></i><span>哞拉松</span><time id="mooMarathonTime">05:00</time>
+          <i aria-hidden="true"></i><span id="marathonLabel">哞拉松</span><time id="mooMarathonTime">05:00</time>
         </div>
         <span class="drag-hint" aria-hidden="true">拖我走 · 右键记事</span>
       </div>
@@ -324,6 +352,7 @@
 
     <script src="mouse-passthrough.js"></script>
     <script src="grass-alert.js"></script>
+    <script src="pet-mode.js"></script>
     <script src="moo.js"></script>
     <script src="app.js"></script>
   </body>

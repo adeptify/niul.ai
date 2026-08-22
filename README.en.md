@@ -88,10 +88,11 @@ Hover a session and the cow looks toward it. Drag the cow and it follows. Double
 ## The unnecessary features that are absolutely necessary
 
 - **Roll the cow** — cycle through nine alternate outfits and poses
+- **Cow, horse, or both** — switch between the cow, a right-facing animated horse, or a paired horse-left/cow-right layout
 - **Quick Memo** — right-click to save a local note and optionally get reminded in 15 minutes, one hour, or tomorrow morning
 - **Summon anywhere** — press `⌘⇧U` to show or hide Niul.ai
-- **Status chatter** — optional spoken and written reactions when agent state changes
-- **Moo Marathon** — click five times to start a five-minute moo loop; click five more times to stop it
+- **Status chatter** — optional animated and written reactions when agent state changes
+- **Moo / Horse Marathon** — five clicks start the call that matches the current mode; in paired mode both characters join in
 
 <p align="center">
   <img src="assets/niulai-skirt-v1.png" width="15%" alt="Niul.ai wearing a skirt">
@@ -99,6 +100,24 @@ Hover a session and the cow looks toward it. Drag the cow and it follows. Double
   <img src="assets/niulai-backpack-v1.png" width="15%" alt="Niul.ai wearing a backpack">
   <img src="assets/niulai-dance-v1.png" width="15%" alt="Niul.ai dancing">
   <img src="assets/niulai-football-v1.png" width="15%" alt="Niul.ai playing football">
+</p>
+
+### Meet Malai
+
+One cow watching every agent felt a little lonely, so a horse showed up.
+
+Malai is a full companion rather than a cow reskin: warm chestnut fuzz, a long face, unruly mane, half-lidded eyes, blinking, cursor-aware attention, animated speech, and a deliberately questionable synthesized neigh.
+
+- **Cow mode:** Niul.ai alone, with the five-click Moo Marathon
+- **Horse mode:** right-facing Malai alone, with an actual Horse Marathon
+- **Cow + horse mode:** horse on the left, cow on the right, watching, speaking, and calling together
+
+All three modes retain the same session monitoring, token usage, market, memo, dragging, petting, and reminder features. Switch modes from **Appearance & Sound**.
+
+<p align="center">
+  <img src="assets/niulai-pet-modes.png" width="88%" alt="Niul.ai settings switching between cow, horse, and horse-left cow-right modes">
+  <br>
+  <sub>Mock screen using the actual in-app cow and horse character assets.</sub>
 </p>
 
 There is also an optional market panel for eight major indices from mainland China, Hong Kong, and the US.
