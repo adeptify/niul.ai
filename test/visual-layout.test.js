@@ -5,8 +5,11 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "renderer/index.html"), "utf8");
-const css = fs.readFileSync(path.join(root, "renderer/styles.css"), "utf8");
+const baseCss = fs.readFileSync(path.join(root, "renderer/styles.css"), "utf8");
+const herdCss = fs.readFileSync(path.join(root, "renderer/herd.css"), "utf8");
+const css = `${baseCss}\n${herdCss}`;
 const js = fs.readFileSync(path.join(root, "renderer/app.js"), "utf8");
+const sessionViewJs = fs.readFileSync(path.join(root, "renderer/session-view.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "renderer/moo.js"), "utf8");
 
 function extract(source, start, end) {
@@ -117,6 +120,13 @@ test("top bar keeps the approved six-action order", () => {
     "gear",
     "petMenuButton",
   ]);
+});
+
+test("herd styles load after the shared shell and stay in their own package", () => {
+  assert.ok(html.indexOf('href="herd.css"') > html.indexOf('href="styles.css"'));
+  assert.doesNotMatch(baseCss, /\.herd-preview/);
+  assert.match(herdCss, /\.herd-preview/);
+  assert.match(herdCss, /#cowStage\[data-herd-mode="true"\]/);
 });
 
 test("memo, market, and settings share opaque overlays inside bubble", () => {
@@ -261,8 +271,8 @@ test("session total shows the filtered count only", () => {
 });
 
 test("visible session paths compact the macOS home prefix", () => {
-  assert.match(js, /function compactDisplayPath\(/);
-  assert.match(js, /\\\/Users\\\/\[\^\/\]\+/);
+  assert.match(sessionViewJs, /function compactDisplayPath\(/);
+  assert.match(sessionViewJs, /\\\/Users\\\/\[\^\/\]\+/);
   assert.match(js, /class="session-path"[^>]*>\$\{escapeHtml\(compactDisplayPath\(/);
 });
 

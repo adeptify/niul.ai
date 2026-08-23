@@ -1,6 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { readJson, safeExists } = require("./files");
 
 const DEFAULT_PATH = path.join(__dirname, "..", "config", "runtimes.default.json");
 
@@ -8,18 +9,10 @@ function userConfigPath(userDataDir) {
   return path.join(userDataDir || path.join(os.homedir(), "Library", "Application Support", "牛来"), "config.json");
 }
 
-function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
-}
-
 function loadConfig(userDataDir) {
   const defaults = readJson(DEFAULT_PATH, {});
   const userFile = userConfigPath(userDataDir);
-  const user = fs.existsSync(userFile) ? readJson(userFile, {}) : {};
+  const user = safeExists(userFile) ? readJson(userFile, {}) : {};
   const runtimeIds = new Set([
     ...Object.keys(defaults.runtimes || {}),
     ...Object.keys(user.runtimes || {}),

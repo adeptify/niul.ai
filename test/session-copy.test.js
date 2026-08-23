@@ -1,31 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-
-const appSource = fs.readFileSync(
-  path.resolve(__dirname, "../renderer/app.js"),
-  "utf8"
-);
-
-function loadFunction(name) {
-  const start = appSource.indexOf(`function ${name}(`);
-  assert.notEqual(start, -1, `missing ${name}`);
-  const open = appSource.indexOf("{", start);
-  let depth = 0;
-  for (let index = open; index < appSource.length; index += 1) {
-    if (appSource[index] === "{") depth += 1;
-    if (appSource[index] === "}") depth -= 1;
-    if (depth === 0) {
-      return vm.runInNewContext(`(${appSource.slice(start, index + 1)})`);
-    }
-  }
-  throw new Error(`unterminated ${name}`);
-}
+const {
+  compactDisplayPath,
+  formatTokens,
+  rowStateText,
+  sessionWorkSummary,
+  timeAgo,
+} = require("../renderer/session-view");
 
 test("generic Agent running title falls back to the session state", () => {
-  const sessionWorkSummary = loadFunction("sessionWorkSummary");
   assert.equal(
     sessionWorkSummary(
       { title: "ChatGPT running", label: "ChatGPT", runtime: "chatgpt" },
@@ -37,7 +20,6 @@ test("generic Agent running title falls back to the session state", () => {
 });
 
 test("Agent prefix is removed while the useful work summary remains", () => {
-  const sessionWorkSummary = loadFunction("sessionWorkSummary");
   assert.equal(
     sessionWorkSummary(
       { title: "Grok 返修 B3 A3 六个 P1 阻断", label: "Grok Build", runtime: "grok" },
@@ -49,7 +31,6 @@ test("Agent prefix is removed while the useful work summary remains", () => {
 });
 
 test("work summary without an Agent prefix stays unchanged", () => {
-  const sessionWorkSummary = loadFunction("sessionWorkSummary");
   assert.equal(
     sessionWorkSummary(
       { title: "Desktop Cleanup Delete Scripts", label: "Grok Build", runtime: "grok" },
@@ -61,7 +42,6 @@ test("work summary without an Agent prefix stays unchanged", () => {
 });
 
 test("completed work summary wins over the generic waiting reason", () => {
-  const sessionWorkSummary = loadFunction("sessionWorkSummary");
   assert.equal(
     sessionWorkSummary(
       {
@@ -75,4 +55,19 @@ test("completed work summary wins over the generic waiting reason", () => {
     ),
     "完成主页与牛记布局调整"
   );
+});
+
+test("session view helpers keep paths, state, token, and relative-time formatting stable", () => {
+  assert.equal(compactDisplayPath("/Users/yijunwang/code/niul.ai"), "~/code/niul.ai");
+  assert.equal(
+    rowStateText({
+      status: "waiting",
+      waitWhy: "allow",
+      statusConfidence: "low",
+      subagentsWorking: 2,
+    }),
+    "停犁 · 等允许 · 看不太清 · 带着 2 头小牛"
+  );
+  assert.equal(formatTokens(12500), "12.5K");
+  assert.equal(timeAgo(1_000, 41_000), "40 秒前");
 });

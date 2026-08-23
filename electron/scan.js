@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { createFileWalker, readJson, safeExists, safeStat } = require("./files");
 const { collectTokenUsage } = require("./tokens");
 
 const STATUS_LABEL = {
@@ -13,6 +14,7 @@ const STATUS_LABEL = {
 const IDLE_STOPPED = "Runtime 在运行，但此 Session 已停止活动";
 
 const cwdCache = new Map();
+const walkFiles = createFileWalker({ maxDepth: 8, maxFiles: 4000 });
 
 function home() {
   return os.homedir();
@@ -23,36 +25,10 @@ function expand(p) {
   return p.replace(/^~(?=$|\/)/, home());
 }
 
-function exists(p) {
-  try {
-    return Boolean(p) && fs.existsSync(p);
-  } catch {
-    return false;
-  }
-}
+const exists = safeExists;
 
 function statMtime(p) {
-  try {
-    return fs.statSync(p).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-function walkFiles(root, pred, acc = [], depth = 0) {
-  if (!exists(root) || depth > 8 || acc.length > 4000) return acc;
-  let entries;
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const ent of entries) {
-    const full = path.join(root, ent.name);
-    if (ent.isDirectory()) walkFiles(full, pred, acc, depth + 1);
-    else if (pred(full, ent.name)) acc.push(full);
-  }
-  return acc;
+  return safeStat(p)?.mtimeMs || 0;
 }
 
 function snapshotProcesses() {
@@ -153,14 +129,6 @@ function readJsonlCwd(file, maxLines = 40) {
   }
   cwdCache.set(file, "");
   return "";
-}
-
-function readJson(file, fallback = null) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
 }
 
 function readJsonlTail(file, maxBytes = 256 * 1024, maxRecords = 80) {

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createFileWalker, safeExists, safeStat } = require("./files");
 
 const CACHE_MS = 30000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
@@ -8,39 +9,9 @@ const MAX_FILES = 20000;
 const MAX_RATE_LIMIT_FILES = 24;
 const MAX_RATE_LIMIT_BYTES = 512 * 1024;
 let cached = null;
-
-function exists(file) {
-  try {
-    return Boolean(file) && fs.existsSync(file);
-  } catch {
-    return false;
-  }
-}
-
-function stat(file) {
-  try {
-    return fs.statSync(file);
-  } catch {
-    return null;
-  }
-}
-
-function walkFiles(root, predicate, acc = [], depth = 0) {
-  if (!exists(root) || depth > 10 || acc.length >= MAX_FILES) return acc;
-  let entries;
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    if (acc.length >= MAX_FILES) break;
-    const full = path.join(root, entry.name);
-    if (entry.isDirectory()) walkFiles(full, predicate, acc, depth + 1);
-    else if (predicate(full, entry.name)) acc.push(full);
-  }
-  return acc;
-}
+const exists = safeExists;
+const stat = safeStat;
+const walkFiles = createFileWalker({ maxDepth: 10, maxFiles: MAX_FILES });
 
 function filesFromRoots(roots, predicate) {
   const files = [];

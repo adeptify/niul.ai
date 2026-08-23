@@ -1,86 +1,20 @@
 const { shouldIgnoreMouse } = window.niulMousePassthrough;
 const { createGrassAlertTracker } = window.niulGrassAlert;
-
-const STATUS_TEXT = {
-  working: "拉犁",
-  waiting: "停犁",
-  idle: "吃草",
-  offline: "回棚",
-};
-
-const STATUS_HEADING = {
-  working: "拉犁",
-  waiting: "停犁优先",
-  idle: "吃草",
-  offline: "回棚",
-  all: "所有会话",
-};
+const {
+  STATUS_HEADING,
+  STATUS_TEXT,
+  compactDisplayPath,
+  formatTokens,
+  rowStateText,
+  runtimeQuality,
+  sessionName,
+  sessionWorkSummary,
+  timeAgo,
+  waitingCopy,
+  waitWhyOf,
+} = window.niulaiSessionView;
 
 const APPEARANCE_STORAGE_KEY = "niulai.appearance";
-
-function waitWhyOf(row) {
-  return row && row.status === "waiting" ? row.waitWhy || "next" : "";
-}
-
-function sessionName(row) {
-  return row.cwdName || row.title || row.label || "这头";
-}
-
-function compactDisplayPath(value) {
-  return String(value || "").replace(/^\/Users\/[^/]+/, "~");
-}
-
-function sessionWorkSummary(row, displayName, fallbackText) {
-  const label = String(row?.label || "").trim();
-  const runtime = String(row?.runtime || "").trim();
-  const prefixes = [label, label.split(/\s+/)[0], runtime, "Agent"]
-    .filter(Boolean)
-    .sort((left, right) => right.length - left.length);
-  const clean = (value) => {
-    let result = String(value || "").trim();
-    for (const prefix of prefixes) {
-      const lowerResult = result.toLocaleLowerCase();
-      const lowerPrefix = prefix.toLocaleLowerCase();
-      if (lowerResult === lowerPrefix) return "";
-      if (!lowerResult.startsWith(lowerPrefix)) continue;
-      const tail = result.slice(prefix.length);
-      if (!/^[\s·:：|/\\_-]/.test(tail)) continue;
-      result = tail.replace(/^[\s·:：|/\\_-]+/, "").trim();
-      break;
-    }
-    return result;
-  };
-  const title = String(row?.title || "").trim();
-  const completed = String(row?.workSummary || "").trim();
-  const source = completed || (title && title !== displayName ? title : fallbackText);
-  let summary = clean(source);
-  if (!summary || /^(running|active|working)$/i.test(summary)) {
-    summary = clean(fallbackText);
-  }
-  if (!summary || /^(running|active|working)$/i.test(summary)) return "状态更新";
-  return summary;
-}
-
-function waitingCopy(row) {
-  const name = sessionName(row);
-  if (waitWhyOf(row) === "allow") return `${name} 停犁了，在等你点允许。`;
-  if (waitWhyOf(row) === "choose") return `${name} 停犁了，在等你选一下。`;
-  return `${name} 停犁了，正等你。`;
-}
-
-function rowStateText(row) {
-  const parts = [];
-  if (row.status === "waiting") {
-    if (waitWhyOf(row) === "allow") parts.push("停犁 · 等允许");
-    else if (waitWhyOf(row) === "choose") parts.push("停犁 · 等你选");
-    else parts.push(row.statusText || STATUS_TEXT.waiting);
-  } else {
-    parts.push(row.statusText || STATUS_TEXT[row.status] || row.status);
-  }
-  if (row.statusConfidence === "low") parts.push("看不太清");
-  if (row.subagentsWorking > 0) parts.push(`带着 ${row.subagentsWorking} 头小牛`);
-  return parts.join(" · ");
-}
 
 const STATUS_CHANGE = {
   working: (row) => `${sessionName(row)} 套上犁了。`,
@@ -188,167 +122,8 @@ const MOOD_COPY = {
   offline: () => "牛棚里很安静",
 };
 
-const PREVIEW_CONFIG = {
-  pollMs: 5000,
-  petMode: "cow",
-  herdMode: false,
-  cowScale: 1,
-  bubbleScale: 1,
-  soundEnabled: true,
-  market: {
-    enabled: true,
-    provider: "eastmoney",
-    reactionsEnabled: true,
-    thresholdPct: 0.1,
-  },
-  runtimes: {
-    cursor: { enabled: true, label: "Cursor" },
-    "claude-code": { enabled: true, label: "Claude Code" },
-    codex: { enabled: true, label: "Codex" },
-    grok: { enabled: true, label: "Grok Build" },
-    opencode: { enabled: true, label: "OpenCode" },
-  },
-  custom: [],
-};
-
-const PREVIEW_SNAPSHOT = {
-  mood: "working",
-  scannedAt: Date.now(),
-  counts: { working: 2, waiting: 2, idle: 1, offline: 1 },
-  tokenUsage: {
-    tokens: 438420,
-    sources: [
-      { id: "codex", label: "Codex", tokens: 301200, confidence: "high" },
-      { id: "grok", label: "Grok Build", tokens: 137220, confidence: "high" },
-    ],
-    supportedRuntimes: ["codex", "claude-code", "grok", "gemini"],
-    unsupportedReasons: { cursor: "Cursor 本机 Session 暂未暴露实际 usage；不做估算" },
-  },
-  rows: [
-    {
-      id: "preview-cursor",
-      runtime: "cursor",
-      label: "Cursor",
-      status: "working",
-      cwdName: "niul.ai",
-      cwd: "/Users/you/code/niul.ai",
-      mtime: Date.now() - 3000,
-    },
-    {
-      id: "preview-claude",
-      runtime: "claude-code",
-      label: "Claude Code",
-      status: "working",
-      cwdName: "runtime-lab",
-      cwd: "/Users/you/code/runtime-lab",
-      mtime: Date.now() - 8000,
-    },
-    {
-      id: "preview-codex",
-      runtime: "codex",
-      label: "Codex",
-      status: "waiting",
-      statusReason: "Codex 已完成最近一轮",
-      cwdName: "desktop-agent",
-      cwd: "/Users/you/code/desktop-agent",
-      mtime: Date.now() - 180000,
-      tokensToday: 301200,
-      tokenTracked: true,
-    },
-    {
-      id: "grok:preview-grok",
-      runtime: "grok",
-      label: "Grok Build",
-      status: "waiting",
-      statusReason: "Grok 已完成最近一轮",
-      cwdName: "agent-lab",
-      cwd: "/Users/you/code/agent-lab",
-      mtime: Date.now() - 240000,
-      tokensToday: 137220,
-      tokenTracked: true,
-    },
-    {
-      id: "preview-opencode",
-      runtime: "opencode",
-      label: "OpenCode",
-      status: "idle",
-      cwdName: "playground",
-      cwd: "/Users/you/code/playground",
-      mtime: Date.now() - 480000,
-    },
-    {
-      id: "preview-offline",
-      runtime: "pi",
-      label: "Pi",
-      status: "offline",
-      cwdName: "scratch",
-      cwd: "/Users/you/scratch",
-      mtime: Date.now() - 7200000,
-    },
-  ],
-};
-
-const PREVIEW_MARKET_SNAPSHOT = {
-  provider: "eastmoney",
-  providerLabel: "东方财富",
-  fetchedAt: Date.now(),
-  status: "fresh",
-  stale: false,
-  error: "",
-  nextPollMs: 60_000,
-  reaction: null,
-  quotes: [
-    { id: "sse", name: "上证指数", shortName: "上证", price: 3742.31, changePct: 0.18, status: "fresh" },
-    { id: "szse", name: "深证成指", shortName: "深证", price: 11824.6, changePct: 0.42, status: "fresh" },
-    { id: "chinext", name: "创业板指", shortName: "创业板", price: 2459.18, changePct: -0.16, status: "fresh" },
-    { id: "csi300", name: "沪深300", shortName: "沪深300", price: 4321.07, changePct: 0.09, status: "fresh" },
-    { id: "hsi", name: "恒生指数", shortName: "恒生", price: 25214.42, changePct: -0.31, status: "fresh" },
-    { id: "spx", name: "标普500", shortName: "标普500", price: 6812.04, changePct: 0.27, status: "fresh" },
-    { id: "ndx", name: "纳斯达克100", shortName: "纳指100", price: 24861.7, changePct: 0.54, status: "fresh" },
-    { id: "djia", name: "道琼斯指数", shortName: "道琼斯", price: 49122.08, changePct: -0.08, status: "fresh" },
-  ],
-};
-
-function previewApi() {
-  let previewConfig = structuredClone(PREVIEW_CONFIG);
-  let previewMemos = [];
-  const noop = () => {};
-  return {
-    scan: async () => ({ ...PREVIEW_SNAPSHOT, scannedAt: Date.now() }),
-    getMarketSnapshot: async () => ({ ...PREVIEW_MARKET_SNAPSHOT, fetchedAt: Date.now() }),
-    getConfig: async () => previewConfig,
-    saveConfig: async (next) => {
-      previewConfig = next;
-      return previewConfig;
-    },
-    chooseDirectory: async () => "/Users/you/.my-agent/sessions",
-    hideApp: async () => true,
-    quitApp: async () => true,
-    listMemos: async () => previewMemos,
-    saveMemo: async (memo) => {
-      const saved = { id: `preview-${Date.now()}`, createdAt: Date.now(), ...memo };
-      previewMemos = [saved, ...previewMemos];
-      return saved;
-    },
-    completeMemo: async (id) => {
-      previewMemos = previewMemos.filter((memo) => memo.id !== id);
-      return true;
-    },
-    focusSession: async () => true,
-    ackWaitingSession: noop,
-    completeWaitingNudge: noop,
-    setChatterEnabled: noop,
-    setIgnoreMouse: noop,
-    setInteractiveRegions: noop,
-    startWindowDrag: noop,
-    moveWindowDrag: noop,
-    endWindowDrag: noop,
-    onRequestScan: () => noop,
-    onMemoDue: () => noop,
-  };
-}
-
-const api = window.niulai || previewApi();
+const { createPreviewApi, PREVIEW_CONFIG, PREVIEW_SNAPSHOT } = window.niulaiPreviewApi;
+const api = window.niulai || createPreviewApi();
 const herdPreviewParams = new URLSearchParams(window.location.search);
 const herdPreviewActive =
   herdPreviewParams.get("herdPreview") === "1" && Boolean(window.niulaiHerdPreview);
@@ -668,30 +443,6 @@ async function rollCow() {
     button.classList.remove("is-rolling");
     stage.classList.remove("is-rolling");
   }, 600);
-}
-
-function runtimeQuality(id) {
-  if (["claude-code", "codex", "grok"].includes(id)) return "事件状态 · Token";
-  if (id === "cursor") return "事件级状态";
-  if (["claude-desktop", "gemini", "opencode", "pi"].includes(id)) return "Session 活动";
-  return "基础检测";
-}
-
-function timeAgo(timestamp) {
-  const delta = Math.max(0, Date.now() - Number(timestamp || 0));
-  if (delta < 15000) return "刚刚";
-  if (delta < 60000) return `${Math.floor(delta / 1000)} 秒前`;
-  if (delta < 3600000) return `${Math.floor(delta / 60000)} 分前`;
-  if (delta < 86400000) return `${Math.floor(delta / 3600000)} 小时前`;
-  return `${Math.floor(delta / 86400000)} 天前`;
-}
-
-function formatTokens(tokens) {
-  const value = Math.max(0, Number(tokens || 0));
-  if (value >= 1000000000) return `${(value / 1000000000).toFixed(value >= 10000000000 ? 1 : 2)}B`;
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 1 : 2)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 100000 ? 0 : 1)}K`;
-  return String(Math.round(value));
 }
 
 const MARKET_INDEX_ORDER = [
@@ -1533,73 +1284,13 @@ function focusHerdSession(targetId) {
   showToast("已亮出它认领的 Session；点列表才会切换 Runtime");
 }
 
-function mountHerdSlice() {
-  if (!herdPreviewActive || herdPreviewController) return;
-  const stage = document.getElementById("cowStage");
-  const pet = document.getElementById("pet");
-  pet.dataset.herdPreview = "true";
-  pet.dataset.petMode = "cow";
-  petMode = "cow";
-  const count = window.niulaiHerdPreview.normalizePreviewCount(
-    herdPreviewParams.get("herdCount")
-  );
-  herdPreviewController = window.niulaiHerdPreview.mountHerdPreview({
-    stage,
-    count,
-    skins: COW_SKINS.map((skin) => ({ ...skin, src: cowSource(skin, "waiting") })),
-    soundEnabled: config?.soundEnabled !== false,
-    actorScale: normalizedScale(config?.cowScale),
-    prepareFrame: prepareCowFrame,
-    drawFrame: drawPreparedFrame,
-    onArmAudio: armPetAudio,
-    onGroupMoo: (kind) => playCowMoo(kind),
-    onSingleMoo: (kind) => playCowMoo(kind),
-    onOpenMemo: openMemoPanel,
-    onOpenMarket: openMarketPanel,
-    onFocusSession: focusHerdSession,
-    onMarathonToggle: toggleMooMarathon,
-    onSoundChange: (enabled) => setCowSoundEnabled(enabled),
-    onCountChange: (nextCount) => {
-      herdPreviewParams.set("herdCount", String(nextCount));
-      window.history.replaceState({}, "", `${window.location.pathname}?${herdPreviewParams}`);
-      queueMicrotask(syncHerdPreviewRows);
-      requestAnimationFrame(syncInteractiveRegions);
-    },
-    onLayoutChange: syncInteractiveRegions,
-    getBounds: () => cowBoundsInWindow(stage),
-    onDragStart: ({ originX, originY, screenX, screenY, bounds }) =>
-      api.startWindowDrag({ originX, originY, screenX, screenY, cowBounds: bounds }),
-    onDragMove: (screenX, screenY, bounds) => api.moveWindowDrag(screenX, screenY, bounds),
-    onDragEnd: () => api.endWindowDrag(),
-  });
-  const roll = document.getElementById("rollCow");
-  roll.disabled = false;
-  roll.setAttribute("aria-disabled", "false");
-  roll.setAttribute("aria-label", "重抽所有 Session 牛造型");
-  roll.title = "Roll 全群 Session 牛";
-  syncHerdPreviewRows();
-  requestAnimationFrame(syncInteractiveRegions);
-}
-
 function herdSkinOptions() {
   return COW_SKINS.map((skin) => ({ ...skin, src: cowSource(skin, "waiting") }));
 }
 
-function mountHerdRuntime() {
-  if (herdRuntimeController) return;
-  const stage = document.getElementById("cowStage");
-  const pet = document.getElementById("pet");
-  herdModeActive = true;
-  pet.dataset.herdMode = "true";
-  pet.dataset.petMode = "cow";
-  stage.dataset.herdMode = "true";
-  petMode = "cow";
-  herdRuntimeController = window.niulaiHerdPreview.mountHerdPreview({
+function herdMountOptions(stage) {
+  return {
     stage,
-    actors: [],
-    introduceOnMount: false,
-    previewMode: false,
-    showToolbar: false,
     skins: herdSkinOptions(),
     soundEnabled: config?.soundEnabled !== false,
     actorScale: normalizedScale(config?.cowScale),
@@ -1612,6 +1303,64 @@ function mountHerdRuntime() {
     onOpenMarket: openMarketPanel,
     onFocusSession: focusHerdSession,
     onMarathonToggle: toggleMooMarathon,
+    onLayoutChange: syncInteractiveRegions,
+    getBounds: () => cowBoundsInWindow(stage),
+    onDragStart: ({ originX, originY, screenX, screenY, bounds }) =>
+      api.startWindowDrag({ originX, originY, screenX, screenY, cowBounds: bounds }),
+    onDragMove: (screenX, screenY, bounds) => api.moveWindowDrag(screenX, screenY, bounds),
+    onDragEnd: () => api.endWindowDrag(),
+  };
+}
+
+function enableHerdRollControl() {
+  const roll = document.getElementById("rollCow");
+  roll.disabled = false;
+  roll.setAttribute("aria-disabled", "false");
+  roll.setAttribute("aria-label", "重抽所有 Session 牛造型");
+  roll.title = "Roll 全群 Session 牛";
+}
+
+function mountHerdSlice() {
+  if (!herdPreviewActive || herdPreviewController) return;
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  pet.dataset.herdPreview = "true";
+  pet.dataset.petMode = "cow";
+  petMode = "cow";
+  const count = window.niulaiHerdPreview.normalizePreviewCount(
+    herdPreviewParams.get("herdCount")
+  );
+  herdPreviewController = window.niulaiHerdPreview.mountHerdPreview({
+    ...herdMountOptions(stage),
+    count,
+    onSoundChange: (enabled) => setCowSoundEnabled(enabled),
+    onCountChange: (nextCount) => {
+      herdPreviewParams.set("herdCount", String(nextCount));
+      window.history.replaceState({}, "", `${window.location.pathname}?${herdPreviewParams}`);
+      queueMicrotask(syncHerdPreviewRows);
+      requestAnimationFrame(syncInteractiveRegions);
+    },
+  });
+  enableHerdRollControl();
+  syncHerdPreviewRows();
+  requestAnimationFrame(syncInteractiveRegions);
+}
+
+function mountHerdRuntime() {
+  if (herdRuntimeController) return;
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  herdModeActive = true;
+  pet.dataset.herdMode = "true";
+  pet.dataset.petMode = "cow";
+  stage.dataset.herdMode = "true";
+  petMode = "cow";
+  herdRuntimeController = window.niulaiHerdPreview.mountHerdPreview({
+    ...herdMountOptions(stage),
+    actors: [],
+    introduceOnMount: false,
+    previewMode: false,
+    showToolbar: false,
     onActorsChange: (actors, event) => {
       if (event?.type !== "roll" || !herdRuntimeState) return;
       herdRuntimeState = {
@@ -1628,18 +1377,8 @@ function mountHerdRuntime() {
         revision: (herdRuntimeState.revision || 0) + 1,
       };
     },
-    onLayoutChange: syncInteractiveRegions,
-    getBounds: () => cowBoundsInWindow(stage),
-    onDragStart: ({ originX, originY, screenX, screenY, bounds }) =>
-      api.startWindowDrag({ originX, originY, screenX, screenY, cowBounds: bounds }),
-    onDragMove: (screenX, screenY, bounds) => api.moveWindowDrag(screenX, screenY, bounds),
-    onDragEnd: () => api.endWindowDrag(),
   });
-  const roll = document.getElementById("rollCow");
-  roll.disabled = false;
-  roll.setAttribute("aria-disabled", "false");
-  roll.setAttribute("aria-label", "重抽所有 Session 牛造型");
-  roll.title = "Roll 全群 Session 牛";
+  enableHerdRollControl();
   requestAnimationFrame(syncInteractiveRegions);
 }
 

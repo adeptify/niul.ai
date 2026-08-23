@@ -10,9 +10,9 @@ const {
   globalShortcut,
   Notification,
 } = require("electron");
-const { Worker } = require("node:worker_threads");
 const path = require("path");
 const { loadConfig, saveConfig } = require("./config");
+const { readLaunchOptions, rendererQuery } = require("./launch-options");
 const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
 const { EastmoneyIndexProvider } = require("./market/eastmoney-provider");
@@ -22,16 +22,8 @@ const {
   createWaitingReminderEngine,
   withWaitingReminder,
 } = require("./waiting-reminders");
-const {
-  nativeWindowPosition,
-  windowPositionForCursor,
-  windowPositionForRectGrab,
-} = require("./window-position");
-const {
-  normalizeInteractiveRegions,
-  pointInInteractiveRegions,
-} = require("./pointer-regions");
-const { cachedSnapshotAfterFailure } = require("./scan-recovery");
+const { createSessionScanner } = require("./session-scanner");
+const { createWindowInteractions } = require("./window-interactions");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
@@ -44,19 +36,18 @@ let marketReactionEngine;
 let memoTimer;
 let mouseGuardTimer;
 let backgroundScanTimer;
-let scanWorker;
-let scanInFlight;
-let scanRequestId = 0;
-let windowDrag = null;
-// Keep the first visible frame interactive. The renderer enables click-through
-// only after it has measured the bubble and actor surfaces.
-let ignoreMouseRequested = false;
-let mouseEventsIgnored = null;
-let interactiveRegions = [];
-let lastSnapshot = null;
 let chatterEnabled = true;
 const waitingReminders = createWaitingReminderEngine();
 const activeWaitingNotifications = new Set();
+const windowInteractions = createWindowInteractions({ getWindow: () => win, screen });
+const sessionScanner = createSessionScanner({
+  workerPath: path.join(__dirname, "scan-worker.js"),
+  getConfig: () => config,
+  onSnapshot: (snapshot) => {
+    const waitingReminder = processWaitingReminders(snapshot);
+    return withWaitingReminder(snapshot, waitingReminder);
+  },
+});
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
@@ -66,7 +57,7 @@ function showWindow() {
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.show();
-  applyIgnoreMouse(false);
+  windowInteractions.forceInteractive();
   app.focus({ steal: true });
   win.focus();
   if (win.webContents && !win.webContents.isDestroyed()) {
@@ -150,7 +141,7 @@ function scheduleBackgroundScanning() {
   const interval = Math.max(2500, Number(config?.pollMs) || 5000);
   backgroundScanTimer = setInterval(() => {
     if (!win || win.isDestroyed() || win.isVisible()) return;
-    snapshot().catch(() => {});
+    sessionScanner.scan().catch(() => {});
   }, interval);
 }
 
@@ -185,167 +176,17 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.once("ready-to-show", () => {
     if (!win) return;
-    applyIgnoreMouse(false);
+    windowInteractions.forceInteractive();
     win.showInactive();
   });
   win.on("closed", () => {
     win = null;
-    mouseEventsIgnored = null;
-    interactiveRegions = [];
+    windowInteractions.reset();
   });
-  const herdPreview = process.env.NIULAI_HERD_PREVIEW === "1";
-  const herdMode = process.env.NIULAI_HERD_MODE === "1";
-  const herdCount = ["1", "8", "34"].includes(process.env.NIULAI_HERD_COUNT)
-    ? process.env.NIULAI_HERD_COUNT
-    : "8";
+  const launchOptions = readLaunchOptions();
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"), {
-    query: herdPreview
-      ? { herdPreview: "1", herdCount }
-      : herdMode
-        ? { herdMode: "1" }
-        : undefined,
+    query: rendererQuery(launchOptions),
   });
-}
-
-function finishScan(message = {}) {
-  if (!scanInFlight || message.id !== scanInFlight.id) return;
-  const { resolve, reject } = scanInFlight;
-  scanInFlight = null;
-  if (message.snapshot) {
-    lastSnapshot = message.snapshot;
-    const waitingReminder = processWaitingReminders(lastSnapshot);
-    resolve(withWaitingReminder(lastSnapshot, waitingReminder));
-    return;
-  }
-  const error = new Error(message.error?.message || "Session scan failed");
-  const fallback = cachedSnapshotAfterFailure(lastSnapshot, error);
-  if (fallback) resolve(fallback);
-  else reject(error);
-}
-
-function startScanWorker() {
-  if (scanWorker) return scanWorker;
-  scanWorker = new Worker(path.join(__dirname, "scan-worker.js"));
-  scanWorker.on("message", finishScan);
-  scanWorker.on("error", (error) => {
-    if (scanInFlight) finishScan({ id: scanInFlight.id, error: { message: error.message } });
-  });
-  scanWorker.on("exit", () => {
-    scanWorker = null;
-    if (scanInFlight) {
-      finishScan({ id: scanInFlight.id, error: { message: "Session scan worker stopped" } });
-    }
-  });
-  return scanWorker;
-}
-
-function snapshot() {
-  if (scanInFlight) return scanInFlight.promise;
-  const id = ++scanRequestId;
-  let resolve;
-  let reject;
-  const promise = new Promise((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
-  });
-  scanInFlight = { id, promise, resolve, reject };
-  startScanWorker().postMessage({ id, config });
-  return promise;
-}
-
-function displayWorkAreaNear(x, y) {
-  const point = { x: Math.round(x), y: Math.round(y) };
-  const display = screen.getDisplayNearestPoint(point);
-  return (display || screen.getPrimaryDisplay()).workArea;
-}
-
-function cursorIsOverInteractiveSurface() {
-  if (!win || !interactiveRegions.length) return true;
-  const cursor = screen.getCursorScreenPoint();
-  const bounds = win.getBounds();
-  return pointInInteractiveRegions(
-    { x: cursor.x - bounds.x, y: cursor.y - bounds.y },
-    interactiveRegions,
-    18
-  );
-}
-
-function applyIgnoreMouse(ignore) {
-  if (!win || win.isDestroyed()) return;
-  const shouldIgnore = Boolean(ignore) && !windowDrag && !cursorIsOverInteractiveSurface();
-  if (mouseEventsIgnored === shouldIgnore) return;
-  mouseEventsIgnored = shouldIgnore;
-  win.setIgnoreMouseEvents(shouldIgnore, { forward: true });
-}
-
-function moveDraggedWindow(screenX, screenY, nextCowBounds) {
-  if (!win || win.isDestroyed() || !windowDrag) return;
-  const cursor = nativeWindowPosition({ x: screenX, y: screenY });
-  if (!cursor) return;
-  const normalizedBounds = normalizeInteractiveRegions([nextCowBounds])[0];
-  if (normalizedBounds) windowDrag.cowBounds = normalizedBounds;
-  const cowBounds = windowDrag.cowBounds;
-  const workArea = displayWorkAreaNear(cursor.x, cursor.y);
-  const next = cowBounds
-    ? windowPositionForRectGrab(
-        cursor.x,
-        cursor.y,
-        windowDrag.grabX,
-        windowDrag.grabY,
-        cowBounds,
-        workArea
-      )
-    : windowPositionForCursor(
-        cursor.x,
-        cursor.y,
-        windowDrag.offsetX,
-        windowDrag.offsetY,
-        null,
-        workArea
-      );
-  const nativePosition = nativeWindowPosition(next);
-  if (!nativePosition) return;
-  if (windowDrag.lastX === nativePosition.x && windowDrag.lastY === nativePosition.y) return;
-  try {
-    win.setPosition(nativePosition.x, nativePosition.y, false);
-    windowDrag.lastX = nativePosition.x;
-    windowDrag.lastY = nativePosition.y;
-  } catch (error) {
-    // Pointer events arrive asynchronously. A stale or platform-rejected frame
-    // must not bring down the whole app; stop this drag and let the next gesture
-    // begin from the window's actual position.
-    console.warn("window drag frame rejected", error);
-    endWindowDrag();
-  }
-}
-
-function beginWindowDrag(payload) {
-  if (!win || !payload) return;
-  const originX = Number(payload.originX);
-  const originY = Number(payload.originY);
-  if (!Number.isFinite(originX) || !Number.isFinite(originY)) return;
-  const [wx, wy] = win.getPosition();
-  const cowBounds = normalizeInteractiveRegions([payload.cowBounds])[0] || null;
-  windowDrag = {
-    offsetX: originX - wx,
-    offsetY: originY - wy,
-    grabX: cowBounds ? originX - wx - cowBounds.x : 0,
-    grabY: cowBounds ? originY - wy - cowBounds.y : 0,
-    cowBounds,
-    lastX: wx,
-    lastY: wy,
-  };
-  applyIgnoreMouse(false);
-  const screenX = Number(payload.screenX);
-  const screenY = Number(payload.screenY);
-  if (Number.isFinite(screenX) && Number.isFinite(screenY)) {
-    moveDraggedWindow(screenX, screenY, cowBounds);
-  }
-}
-
-function endWindowDrag() {
-  windowDrag = null;
-  applyIgnoreMouse(ignoreMouseRequested);
 }
 
 app.whenReady().then(() => {
@@ -358,7 +199,7 @@ app.whenReady().then(() => {
   registerGlobalShortcut();
   scheduleBackgroundScanning();
   memoTimer = setInterval(announceDueMemos, 15000);
-  mouseGuardTimer = setInterval(() => applyIgnoreMouse(ignoreMouseRequested), 16);
+  mouseGuardTimer = setInterval(windowInteractions.refreshMousePassthrough, 16);
 
   const iconPath = path.join(__dirname, "..", "assets", "tray-template.svg");
   const icon = nativeImage.createFromPath(iconPath);
@@ -379,7 +220,10 @@ app.whenReady().then(() => {
     console.warn("tray unavailable", err);
   }
 
-  ipcMain.handle("scan", () => (windowDrag && lastSnapshot ? lastSnapshot : snapshot()));
+  ipcMain.handle("scan", () => {
+    const cached = sessionScanner.getLastSnapshot();
+    return windowInteractions.isDragging() && cached ? cached : sessionScanner.scan();
+  });
   ipcMain.handle("get-market-snapshot", async (_event, options = {}) => {
     const marketConfig = config.market || {};
     const marketSnapshot = await marketService.getSnapshot({
@@ -437,23 +281,14 @@ app.whenReady().then(() => {
     chatterEnabled = Boolean(enabled);
   });
   ipcMain.on("set-ignore-mouse", (_e, ignore) => {
-    ignoreMouseRequested = Boolean(ignore);
-    applyIgnoreMouse(ignoreMouseRequested);
+    windowInteractions.requestMousePassthrough(ignore);
   });
   ipcMain.on("set-interactive-regions", (_e, regions) => {
-    interactiveRegions = normalizeInteractiveRegions(regions);
-    applyIgnoreMouse(ignoreMouseRequested);
+    windowInteractions.setInteractiveRegions(regions);
   });
-  ipcMain.on("start-window-drag", (_e, payload) => beginWindowDrag(payload));
-  ipcMain.on("move-window-drag", (_e, payload) => {
-    if (!payload) return;
-    moveDraggedWindow(
-      Number(payload.screenX),
-      Number(payload.screenY),
-      payload.cowBounds
-    );
-  });
-  ipcMain.on("end-window-drag", endWindowDrag);
+  ipcMain.on("start-window-drag", (_e, payload) => windowInteractions.beginDrag(payload));
+  ipcMain.on("move-window-drag", (_e, payload) => windowInteractions.moveDrag(payload));
+  ipcMain.on("end-window-drag", windowInteractions.endDrag);
 });
 
 app.on("window-all-closed", () => app.quit());
@@ -463,5 +298,5 @@ app.on("will-quit", () => {
   if (memoTimer) clearInterval(memoTimer);
   if (mouseGuardTimer) clearInterval(mouseGuardTimer);
   if (backgroundScanTimer) clearInterval(backgroundScanTimer);
-  scanWorker?.terminate();
+  sessionScanner.stop();
 });

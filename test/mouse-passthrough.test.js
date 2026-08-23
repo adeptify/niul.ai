@@ -31,12 +31,13 @@ test("keeps visible surfaces and active pointer gestures interactive", () => {
   );
 });
 
-test("main process starts interactive and polls the cursor before enabling click-through", () => {
+test("main process delegates mouse and drag state to one interaction controller", () => {
   const main = fs.readFileSync(path.join(__dirname, "..", "electron/main.js"), "utf8");
-  assert.match(main, /let ignoreMouseRequested = false/);
-  assert.match(main, /setInterval\(\(\) => applyIgnoreMouse\(ignoreMouseRequested\), 16\)/);
-  assert.match(main, /pointInInteractiveRegions\([\s\S]*interactiveRegions,[\s\S]*18/);
-  assert.match(main, /NIULAI_HERD_PREVIEW/);
+  assert.match(main, /createWindowInteractions/);
+  assert.match(main, /setInterval\(windowInteractions\.refreshMousePassthrough, 16\)/);
+  assert.match(main, /windowInteractions\.forceInteractive\(\)/);
+  assert.match(main, /windowInteractions\.setInteractiveRegions\(regions\)/);
+  assert.doesNotMatch(main, /let (?:windowDrag|ignoreMouseRequested|interactiveRegions)/);
 });
 
 test("classic renderer scripts do not collide in the global scope", () => {
