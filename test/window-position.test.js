@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   clampWindowToKeepRectVisible,
+  nativeWindowPosition,
   windowPositionForCursor,
   windowPositionForRectGrab,
 } = require("../electron/window-position");
@@ -83,4 +84,11 @@ test("keeps the grabbed point under the cursor when the cow flips above the bubb
 test("rejects non-finite cursor math", () => {
   assert.equal(windowPositionForCursor(NaN, 1, 0, 0, cow, workArea), null);
   assert.equal(clampWindowToKeepRectVisible(undefined, 0, cow, workArea), null);
+});
+
+test("only passes integer coordinates accepted by Electron's native boundary", () => {
+  assert.deepEqual(nativeWindowPosition({ x: 10.4, y: -20.6 }), { x: 10, y: -21 });
+  assert.equal(nativeWindowPosition({ x: 0, y: NaN }), null);
+  assert.equal(nativeWindowPosition({ x: 0, y: 2147483648 }), null);
+  assert.equal(nativeWindowPosition({ x: -2147483649, y: 0 }), null);
 });

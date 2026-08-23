@@ -1,4 +1,6 @@
 const MIN_VISIBLE = 48;
+const NATIVE_COORDINATE_MIN = -2147483648;
+const NATIVE_COORDINATE_MAX = 2147483647;
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -68,9 +70,26 @@ function windowPositionForRectGrab(
   );
 }
 
+function nativeWindowPosition(position) {
+  const x = Number(position?.x);
+  const y = Number(position?.y);
+  if (![x, y].every(Number.isFinite)) return null;
+  const rounded = { x: Math.round(x), y: Math.round(y) };
+  if (
+    rounded.x < NATIVE_COORDINATE_MIN ||
+    rounded.x > NATIVE_COORDINATE_MAX ||
+    rounded.y < NATIVE_COORDINATE_MIN ||
+    rounded.y > NATIVE_COORDINATE_MAX
+  ) {
+    return null;
+  }
+  return rounded;
+}
+
 module.exports = {
   MIN_VISIBLE,
   clampWindowToKeepRectVisible,
+  nativeWindowPosition,
   windowPositionForCursor,
   windowPositionForRectGrab,
 };

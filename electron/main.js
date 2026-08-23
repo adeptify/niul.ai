@@ -23,6 +23,7 @@ const {
   withWaitingReminder,
 } = require("./waiting-reminders");
 const {
+  nativeWindowPosition,
   windowPositionForCursor,
   windowPositionForRectGrab,
 } = require("./window-position");
@@ -278,33 +279,44 @@ function applyIgnoreMouse(ignore) {
 }
 
 function moveDraggedWindow(screenX, screenY, nextCowBounds) {
-  if (!win || !windowDrag) return;
+  if (!win || win.isDestroyed() || !windowDrag) return;
+  const cursor = nativeWindowPosition({ x: screenX, y: screenY });
+  if (!cursor) return;
   const normalizedBounds = normalizeInteractiveRegions([nextCowBounds])[0];
   if (normalizedBounds) windowDrag.cowBounds = normalizedBounds;
   const cowBounds = windowDrag.cowBounds;
-  const workArea = displayWorkAreaNear(screenX, screenY);
+  const workArea = displayWorkAreaNear(cursor.x, cursor.y);
   const next = cowBounds
     ? windowPositionForRectGrab(
-        screenX,
-        screenY,
+        cursor.x,
+        cursor.y,
         windowDrag.grabX,
         windowDrag.grabY,
         cowBounds,
         workArea
       )
     : windowPositionForCursor(
-        screenX,
-        screenY,
+        cursor.x,
+        cursor.y,
         windowDrag.offsetX,
         windowDrag.offsetY,
         null,
         workArea
       );
-  if (!next) return;
-  if (windowDrag.lastX === next.x && windowDrag.lastY === next.y) return;
-  windowDrag.lastX = next.x;
-  windowDrag.lastY = next.y;
-  win.setPosition(next.x, next.y, false);
+  const nativePosition = nativeWindowPosition(next);
+  if (!nativePosition) return;
+  if (windowDrag.lastX === nativePosition.x && windowDrag.lastY === nativePosition.y) return;
+  try {
+    win.setPosition(nativePosition.x, nativePosition.y, false);
+    windowDrag.lastX = nativePosition.x;
+    windowDrag.lastY = nativePosition.y;
+  } catch (error) {
+    // Pointer events arrive asynchronously. A stale or platform-rejected frame
+    // must not bring down the whole app; stop this drag and let the next gesture
+    // begin from the window's actual position.
+    console.warn("window drag frame rejected", error);
+    endWindowDrag();
+  }
 }
 
 function beginWindowDrag(payload) {
