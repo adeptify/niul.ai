@@ -7,6 +7,7 @@
     pollMs: 5000,
     petMode: "cow",
     herdMode: false,
+    showPetVisuals: true,
     cowScale: 1,
     bubbleScale: 1,
     soundEnabled: true,

@@ -40,6 +40,7 @@ function loadConfig(userDataDir) {
       "maxSessionsPerRuntime",
       "petMode",
       "herdMode",
+      "showPetVisuals",
       "cowScale",
       "bubbleScale",
       "soundEnabled",

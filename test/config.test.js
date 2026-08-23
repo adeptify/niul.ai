@@ -19,9 +19,10 @@ test("upgrades the legacy scan interval without resetting user preferences", () 
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 8);
+  assert.equal(config.configVersion, 9);
   assert.equal(config.petMode, "cow");
   assert.equal(config.herdMode, false);
+  assert.equal(config.showPetVisuals, true);
   assert.equal(config.pollMs, 5000);
   assert.equal(config.cowScale, 1.35);
   assert.equal(config.bubbleScale, 0.9);
@@ -67,8 +68,28 @@ test("preserves an enabled herd while upgrading without changing the saved pet m
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 8);
+  assert.equal(config.configVersion, 9);
   assert.equal(config.herdMode, true);
   assert.equal(config.petMode, "both");
+  assert.equal(config.showPetVisuals, true);
   assert.equal(config.cowScale, 0.85);
+});
+
+test("preserves an explicit bubble-only preference", () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "niulai-config-"));
+  fs.writeFileSync(
+    path.join(userDataDir, "config.json"),
+    JSON.stringify({
+      configVersion: 9,
+      showPetVisuals: false,
+      herdMode: true,
+      petMode: "horse",
+    })
+  );
+
+  const config = loadConfig(userDataDir);
+  assert.equal(config.configVersion, 9);
+  assert.equal(config.showPetVisuals, false);
+  assert.equal(config.herdMode, true);
+  assert.equal(config.petMode, "horse");
 });

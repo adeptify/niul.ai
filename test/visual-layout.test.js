@@ -332,7 +332,7 @@ test("settings labels match the approved A demo", () => {
   assert.match(html, /data-settings-tab="appearance"[^>]*>外观与声音</);
   assert.match(html, /data-settings-tab="scan"[^>]*>巡视范围</);
   assert.match(html, /data-settings-tab="market"[^>]*>大盘</);
-  assert.ok(html.includes("让牛来、马来，或者它们一起陪着。"));
+  assert.ok(html.includes("让牛来、马来，或者只留一张安静的状态气泡。"));
   assert.ok(html.includes('data-settings-tab="appearance"'));
   assert.ok(html.includes('data-settings-tab="scan"'));
   assert.ok(html.includes('data-settings-tab="market"'));
@@ -361,6 +361,21 @@ test("appearance settings expose a reversible herd takeover without replacing pe
   assert.match(js, /herdRuntimeController\?\.destroy\(\)/);
   assert.match(js, /await applyPetMode\(config\?\.petMode\)/);
   assert.equal(cssProperty(".herd-mode-toggle", "border-bottom"), "1px solid var(--hairline)");
+});
+
+test("appearance settings can stop every pet visual while preserving the status bubble", () => {
+  const appearance = extract(
+    html,
+    'data-settings-panel="appearance"',
+    'data-settings-panel="scan"'
+  );
+  assert.match(appearance, /id="showPetVisuals"\s+type="checkbox"/);
+  assert.match(appearance, /牛、马和牛群一起回棚，只保留 Session 状态气泡/);
+  assert.match(js, /next\.showPetVisuals\s*=\s*document\.getElementById\("showPetVisuals"\)\.checked/);
+  assert.match(js, /async function setPetVisualsVisible\(visible\)/);
+  assert.match(css, /#pet\[data-pet-visuals="hidden"\]/);
+  assert.match(css, /#cowStage\[hidden\]/);
+  assert.match(css, /\.roll-button\[hidden\]/);
 });
 
 test("horse mode shares speaking frames while combined mode mixes both calls", () => {

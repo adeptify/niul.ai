@@ -72,6 +72,19 @@ textarea:focus-visible,
   width: min(680px, 100%);
 }
 
+#pet[data-pet-visuals="hidden"] {
+  width: min(460px, 100%);
+  justify-content: flex-end;
+  padding-top: 16px;
+  padding-bottom: 6px;
+}
+
+#pet[data-pet-visuals="hidden"] .bubble-tail,
+#cowStage[hidden],
+.roll-button[hidden] {
+  display: none !important;
+}
+
 #pet.is-cow-upper {
   justify-content: flex-start;
   padding-top: 6px;
@@ -3690,6 +3703,21 @@ textarea::placeholder {
   padding: 8px 0 14px;
   border-top: 0;
   border-bottom: 1px solid var(--hairline);
+}
+
+.pet-visuals-toggle {
+  margin: -2px 0 8px;
+  padding: 8px 0 14px;
+  border-top: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pet-visuals-toggle:has(input:checked) strong {
+  color: var(--tag-bright);
+}
+
+.scale-control.is-disabled {
+  opacity: 0.48;
 }
 
 .herd-mode-toggle > span {

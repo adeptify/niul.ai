@@ -197,6 +197,7 @@ let herdFocusedSessionId = "";
 let herdRuntimeController = null;
 let herdRuntimeState = window.niulaiHerdMode?.createEmptyHerdState?.() || null;
 let herdModeActive = false;
+let petVisualsVisible = false;
 let cowInteractionCleanup = null;
 let passthroughReady = false;
 let lastScanError = "";
@@ -304,7 +305,7 @@ function applyFaceProfile(skin) {
 
 async function swapCharacterFrame(character, src) {
   const state = characterFrames[character];
-  if (!state) return false;
+  if (!state || !petVisualsVisible) return false;
   const requestId = ++state.requestId;
   if (!src || src === state.source) return false;
   const prepared = await prepareCowFrame(src);
@@ -355,6 +356,10 @@ function activePetProfile() {
 }
 
 function setPetExpression(expression = "base") {
+  if (!petVisualsVisible) {
+    document.getElementById("pet").dataset.expression = expression;
+    return Promise.resolve([]);
+  }
   const profile = activePetProfile();
   const updates = [];
   if (profile.includesCow) updates.push(setCowExpression(expression));
@@ -392,7 +397,7 @@ async function applyPetMode(nextMode) {
   syncRollControl();
   syncChatterMenu();
   syncMooMarathon();
-  await setPetExpression(restingCowExpression());
+  if (petVisualsVisible) await setPetExpression(restingCowExpression());
   requestAnimationFrame(syncInteractiveRegions);
 }
 
@@ -402,11 +407,12 @@ async function setCow(nextMood, force = false) {
   mood = nextMood;
   const skin = currentSkin();
   applyFaceProfile(skin);
-  if (activePetProfile().includesCow) await swapCowFrame(cowSource(skin, mood));
   const pet = document.getElementById("pet");
   pet.dataset.mood = mood;
   pet.dataset.skin = currentSkinId;
   pet.dataset.expression = "base";
+  if (!petVisualsVisible) return;
+  if (activePetProfile().includesCow) await swapCowFrame(cowSource(skin, mood));
 
   if (previousMood) {
     const stage = document.getElementById("cowStage");
@@ -419,7 +425,7 @@ async function setCow(nextMood, force = false) {
 }
 
 async function rollCow() {
-  if (!activePetProfile().includesCow) return;
+  if (!petVisualsVisible || !activePetProfile().includesCow) return;
   const candidates = COW_SKINS.filter(
     (skin) =>
       skin.id !== currentSkinId &&
@@ -677,14 +683,16 @@ function flushMarketReaction() {
     return;
   }
   const stage = document.getElementById("cowStage");
-  const className = event.direction === "up" ? "is-market-reacting-up" : "is-market-reacting-down";
-  stage.classList.remove("is-market-reacting-up", "is-market-reacting-down");
-  requestAnimationFrame(() => stage.classList.add(className));
-  window.clearTimeout(marketReactionTimer);
-  marketReactionTimer = window.setTimeout(
-    () => stage.classList.remove("is-market-reacting-up", "is-market-reacting-down"),
-    820
-  );
+  if (petVisualsVisible) {
+    const className = event.direction === "up" ? "is-market-reacting-up" : "is-market-reacting-down";
+    stage.classList.remove("is-market-reacting-up", "is-market-reacting-down");
+    requestAnimationFrame(() => stage.classList.add(className));
+    window.clearTimeout(marketReactionTimer);
+    marketReactionTimer = window.setTimeout(
+      () => stage.classList.remove("is-market-reacting-up", "is-market-reacting-down"),
+      820
+    );
+  }
   showCaption(`${marketReactionCopy(event)}${suffix}`, 3600, {
     speechDuration: event.band >= 1 ? 1300 : 900,
   });
@@ -704,6 +712,7 @@ function spokenText(message) {
 }
 
 function playPetVoice(kind = "medium") {
+  if (!petVisualsVisible) return;
   const profile = activePetProfile();
   if (profile.includesCow && profile.includesHorse) {
     playCowMoo(kind, 0, 0.68);
@@ -728,15 +737,15 @@ function stopSpeaking({ restore = true } = {}) {
   window.clearTimeout(expressionTimer);
   const stage = document.getElementById("cowStage");
   stage?.classList.remove("is-speaking");
-  if (restore && stage) {
+  if (petVisualsVisible && restore && stage) {
     setPetExpression(restingCowExpression());
   }
-  scheduleBlink();
+  if (petVisualsVisible) scheduleBlink();
 }
 
 function startSpeaking(duration, attention = false) {
   const stage = document.getElementById("cowStage");
-  if (!stage) return;
+  if (!petVisualsVisible || !stage) return;
   window.clearInterval(speakingTimer);
   window.clearTimeout(expressionTimer);
   window.clearTimeout(blinkTimer);
@@ -759,7 +768,12 @@ function startSpeaking(duration, attention = false) {
 
 function scheduleBlink() {
   window.clearTimeout(blinkTimer);
+  if (!petVisualsVisible) {
+    blinkTimer = null;
+    return;
+  }
   blinkTimer = window.setTimeout(async () => {
+    if (!petVisualsVisible) return;
     const stage = document.getElementById("cowStage");
     const profile = activePetProfile();
     const canBlink =
@@ -781,7 +795,13 @@ function scheduleBlink() {
 function scheduleAmbientMotion(delay = 3200 + Math.random() * 2800) {
   window.clearTimeout(ambientMotionTimer);
   window.clearTimeout(ambientMotionEndTimer);
+  if (!petVisualsVisible) {
+    ambientMotionTimer = null;
+    ambientMotionEndTimer = null;
+    return;
+  }
   ambientMotionTimer = window.setTimeout(() => {
+    if (!petVisualsVisible) return;
     const stage = document.getElementById("cowStage");
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const isBusy =
@@ -814,6 +834,11 @@ function scheduleAmbientMotion(delay = 3200 + Math.random() * 2800) {
 
 function showCaption(message, duration = 1800, options = {}) {
   const caption = document.getElementById("cowCaption");
+  if (!petVisualsVisible) {
+    caption.classList.remove("is-visible", "is-attention", "is-session-focus");
+    showToast(message, duration > 0 ? Math.min(duration, 5000) : 1800);
+    return;
+  }
   caption.textContent = spokenText(message);
   caption.classList.add("is-visible");
   caption.classList.toggle("is-attention", Boolean(options.attention));
@@ -830,12 +855,12 @@ function showCaption(message, duration = 1800, options = {}) {
   }
 }
 
-function showToast(message) {
+function showToast(message, duration = 1800) {
   const toast = document.getElementById("toast");
   toast.textContent = message;
   toast.classList.add("is-visible");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
+  toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), duration);
 }
 
 function reminderTimestamp(value) {
@@ -1347,7 +1372,7 @@ function mountHerdSlice() {
 }
 
 function mountHerdRuntime() {
-  if (herdRuntimeController) return;
+  if (!petVisualsVisible || herdRuntimeController) return;
   const stage = document.getElementById("cowStage");
   const pet = document.getElementById("pet");
   herdModeActive = true;
@@ -1383,20 +1408,47 @@ function mountHerdRuntime() {
 }
 
 function stopSinglePetMotion() {
-  for (const timer of [blinkTimer, ambientMotionTimer, ambientMotionEndTimer, expressionTimer]) {
+  for (const timer of [
+    blinkTimer,
+    ambientMotionTimer,
+    ambientMotionEndTimer,
+    expressionTimer,
+    attentionTimer,
+    stateChangeTimer,
+    captionTimer,
+  ]) {
     window.clearTimeout(timer);
   }
+  window.clearInterval(speakingTimer);
+  window.cancelAnimationFrame(stateChangeFrame);
   blinkTimer = null;
   ambientMotionTimer = null;
   ambientMotionEndTimer = null;
   expressionTimer = null;
+  attentionTimer = null;
+  stateChangeTimer = null;
+  stateChangeFrame = null;
+  captionTimer = null;
+  speakingTimer = null;
+}
+
+function destroyHerdRuntime({ resetState = false } = {}) {
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  herdRuntimeController?.destroy();
+  herdRuntimeController = null;
+  if (resetState) herdRuntimeState = window.niulaiHerdMode.createEmptyHerdState();
+  herdModeActive = false;
+  delete pet.dataset.herdMode;
+  delete stage.dataset.herdMode;
+  delete stage.dataset.herdReadyMs;
+  delete stage.dataset.herdFirstReadyMs;
 }
 
 async function setHerdModeEnabled(enabled) {
-  const next = Boolean(enabled);
+  const next = Boolean(enabled) && petVisualsVisible;
   if (next === herdModeActive) return;
   const stage = document.getElementById("cowStage");
-  const pet = document.getElementById("pet");
   if (next) {
     cowInteractionCleanup?.();
     stopSinglePetMotion();
@@ -1404,20 +1456,84 @@ async function setHerdModeEnabled(enabled) {
     mountHerdRuntime();
     reconcileHerdRuntime(latestSnapshot);
   } else {
-    herdRuntimeController?.destroy();
-    herdRuntimeController = null;
-    herdRuntimeState = window.niulaiHerdMode.createEmptyHerdState();
-    herdModeActive = false;
-    delete pet.dataset.herdMode;
-    delete stage.dataset.herdMode;
-    delete stage.dataset.herdReadyMs;
-    delete stage.dataset.herdFirstReadyMs;
+    destroyHerdRuntime({ resetState: true });
     stage.setAttribute("role", "button");
     stage.setAttribute("tabindex", "0");
     stage.setAttribute(
       "aria-label",
       "牛来。单击展开状态，拖动移动，双击抚摸，右键快速记事"
     );
+    await applyPetMode(config?.petMode);
+    await setCow(latestSnapshot?.mood || mood || "waiting", true);
+    bindCowInteraction();
+    scheduleBlink();
+    scheduleAmbientMotion();
+    syncRollControl();
+  }
+  requestAnimationFrame(syncInteractiveRegions);
+  syncMousePassthrough();
+}
+
+function shouldShowPetVisuals(nextConfig = config) {
+  return herdPreviewActive || herdModeForced || nextConfig?.showPetVisuals !== false;
+}
+
+async function setPetVisualsVisible(visible) {
+  const next = herdPreviewActive || herdModeForced || Boolean(visible);
+  const pet = document.getElementById("pet");
+  const stage = document.getElementById("cowStage");
+  const roll = document.getElementById("rollCow");
+  petVisualsVisible = next;
+  pet.dataset.petVisuals = next ? "shown" : "hidden";
+
+  if (!next) {
+    for (const frame of Object.values(characterFrames)) frame.requestId += 1;
+    cowInteractionCleanup?.();
+    if (mooMarathonEndsAt) stopMooMarathon(false);
+    stopCowPointing();
+    stopSinglePetMotion();
+    destroyHerdRuntime({ resetState: false });
+    stage.hidden = true;
+    stage.setAttribute("aria-hidden", "true");
+    stage.removeAttribute("role");
+    stage.removeAttribute("tabindex");
+    stage.classList.remove(
+      "is-speaking",
+      "is-observing-session",
+      "is-state-changing",
+      "is-petted",
+      "is-rolling",
+      "is-dragging",
+      "is-ambient-moving",
+      "is-market-reacting-up",
+      "is-market-reacting-down",
+      "is-moo-marathon"
+    );
+    pet.classList.remove("is-cow-upper", "is-observing-session", "is-wait-attention");
+    roll.hidden = true;
+    document.getElementById("cowCaption").classList.remove(
+      "is-visible",
+      "is-attention",
+      "is-session-focus"
+    );
+    await applyPetMode(config?.petMode);
+    requestAnimationFrame(syncInteractiveRegions);
+    syncMousePassthrough();
+    return;
+  }
+
+  stage.hidden = false;
+  stage.setAttribute("aria-hidden", "false");
+  roll.hidden = false;
+  if (herdPreviewActive) {
+    mountHerdSlice();
+  } else if (herdModeForced || config?.herdMode === true) {
+    await setHerdModeEnabled(true);
+  } else if (herdModeActive) {
+    await setHerdModeEnabled(false);
+  } else {
+    stage.setAttribute("role", "button");
+    stage.setAttribute("tabindex", "0");
     await applyPetMode(config?.petMode);
     await setCow(latestSnapshot?.mood || mood || "waiting", true);
     bindCowInteraction();
@@ -1527,6 +1643,7 @@ async function openSession(id, element) {
 }
 
 function pointCowAt(element) {
+  if (!petVisualsVisible) return;
   const bubble = document.getElementById("bubble");
   if (bubble.classList.contains("is-collapsed")) return;
   const pet = document.getElementById("pet");
@@ -1559,6 +1676,7 @@ function pointCowAt(element) {
 }
 
 function pointCowAtMarket(element) {
+  if (!petVisualsVisible) return;
   if (document.getElementById("bubble").classList.contains("is-collapsed")) return;
   const quote = latestMarketSnapshot?.quotes?.find(
     (item) => String(item.id) === String(element.dataset.marketId)
@@ -1672,6 +1790,10 @@ async function announceGrass(snapshot, now, blocked) {
 
 function syncWaitAttention(rows) {
   const pet = document.getElementById("pet");
+  if (!petVisualsVisible) {
+    pet?.classList.remove("is-wait-attention");
+    return;
+  }
   const urgent = (rows || []).some((row) => waitWhyOf(row) === "allow" || waitWhyOf(row) === "choose");
   pet?.classList.toggle("is-wait-attention", urgent);
   const stage = document.getElementById("cowStage");
@@ -1716,6 +1838,15 @@ async function tick() {
       const nudgeSpoke = announceHerdWaitingReminder(snapshot.waitingReminder);
       hasInitialSnapshot = true;
       if (!snapshot.scanError) beacon.title = "牛群巡视正常";
+      return;
+    }
+    if (!petVisualsVisible) {
+      const statusSpoke = announceStatusChanges(previousRows, snapshot.rows || []);
+      const nudgeSpoke = announceWaitingReminder(snapshot.waitingReminder, statusSpoke);
+      await announceGrass(snapshot, now, statusSpoke || nudgeSpoke);
+      if (!statusSpoke && !nudgeSpoke) maybeShowFirstRunHint(snapshot);
+      hasInitialSnapshot = true;
+      beacon.title = snapshot.scanError ? "沿用上次巡视" : "扫描正常";
       return;
     }
     await setCow(snapshot.mood);
@@ -1930,7 +2061,7 @@ function marathonRemainingText() {
 function syncMooMarathon() {
   const badge = document.getElementById("mooMarathon");
   if (!badge) return;
-  const running = mooMarathonEndsAt > Date.now();
+  const running = petVisualsVisible && mooMarathonEndsAt > Date.now();
   badge.hidden = !running;
   document.getElementById("cowStage")?.classList.toggle("is-moo-marathon", running);
   herdPreviewController?.setMarathon(running);
@@ -2004,7 +2135,7 @@ function cowBoundsInWindow(stage) {
 function bindCowInteraction() {
   const stage = document.getElementById("cowStage");
   const pet = document.getElementById("pet");
-  if (herdPreviewActive || herdModeActive || cowInteractionCleanup) return;
+  if (!petVisualsVisible || herdPreviewActive || herdModeActive || cowInteractionCleanup) return;
   const listenerAbort = new AbortController();
   const listenerOptions = { signal: listenerAbort.signal };
   let dragFrame = 0;
@@ -2272,6 +2403,7 @@ function fillSettings(nextConfig) {
   const mode = normalizePetMode(nextConfig.petMode);
   const modeInput = document.querySelector(`input[name="petMode"][value="${CSS.escape(mode)}"]`);
   if (modeInput) modeInput.checked = true;
+  document.getElementById("showPetVisuals").checked = nextConfig.showPetVisuals !== false;
   document.getElementById("herdMode").checked = nextConfig.herdMode === true;
   syncScaleControls(nextConfig);
   document.getElementById("soundEnabled").checked = nextConfig.soundEnabled !== false;
@@ -2283,10 +2415,18 @@ function fillSettings(nextConfig) {
     `input[name="marketThreshold"][value="${CSS.escape(threshold)}"]`
   );
   (thresholdInput || document.querySelector('input[name="marketThreshold"][value="0.1"]')).checked = true;
+  syncPetVisualSettingsAvailability();
   syncMarketSettingsAvailability();
   draftCustom = structuredClone(nextConfig.custom || []);
   renderCustomRuntimes();
   hideCustomEditor();
+}
+
+function syncPetVisualSettingsAvailability() {
+  const enabled = document.getElementById("showPetVisuals").checked;
+  const cowScale = document.getElementById("cowScale");
+  cowScale.disabled = !enabled;
+  cowScale.closest(".scale-control")?.classList.toggle("is-disabled", !enabled);
 }
 
 function syncMarketSettingsAvailability() {
@@ -2368,7 +2508,7 @@ function addCustomRuntime() {
 
 function closeSettings() {
   applyDisplayScale(config);
-  if (!herdModeActive) applyPetMode(config.petMode);
+  if (petVisualsVisible && !herdModeActive) applyPetMode(config.petMode);
   setSettingsMessage("修改会在保存并重扫后生效。");
   setActiveBubbleOverlay(null);
   syncInteractiveRegions();
@@ -2386,6 +2526,7 @@ async function saveSettings() {
     document.querySelector('input[name="petMode"]:checked')?.value
   );
   next.herdMode = document.getElementById("herdMode").checked;
+  next.showPetVisuals = document.getElementById("showPetVisuals").checked;
   next.soundEnabled = document.getElementById("soundEnabled").checked;
   next.market = {
     ...(next.market || {}),
@@ -2398,13 +2539,10 @@ async function saveSettings() {
   };
   next.custom = structuredClone(draftCustom);
   setSettingsMessage("正在保存…");
-  const wasHerdMode = herdModeActive;
   config = await api.saveConfig(next);
   setCowSoundEnabled(config.soundEnabled !== false);
   herdRuntimeController?.setSound(config.soundEnabled !== false);
-  const shouldEnableHerd = herdModeForced || config.herdMode === true;
-  await setHerdModeEnabled(shouldEnableHerd);
-  if (!shouldEnableHerd && !wasHerdMode) await applyPetMode(config.petMode);
+  await setPetVisualsVisible(shouldShowPetVisuals(config));
   applyDisplayScale(config);
   if (config.market?.enabled === false || config.market?.reactionsEnabled === false) {
     pendingMarketReaction = null;
@@ -2452,9 +2590,13 @@ function bindSettings() {
     "change",
     syncMarketSettingsAvailability
   );
+  document.getElementById("showPetVisuals").addEventListener(
+    "change",
+    syncPetVisualSettingsAvailability
+  );
   for (const input of document.querySelectorAll('input[name="petMode"]')) {
     input.addEventListener("change", () => {
-      if (input.checked && !herdModeActive) applyPetMode(input.value);
+      if (input.checked && petVisualsVisible && !herdModeActive) applyPetMode(input.value);
     });
   }
   document.getElementById("showCustomEditor").addEventListener("click", showCustomEditor);
@@ -2709,19 +2851,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   setCowSoundEnabled(config.soundEnabled !== false);
   applyDisplayScale(config);
   fillSettings(config);
-  if (herdPreviewActive) {
-    mountHerdSlice();
-  } else if (herdModeForced || config.herdMode === true) {
-    mountHerdRuntime();
-  } else {
-    bindCowInteraction();
-    Promise.all([setCow("waiting", true), applyPetMode(config.petMode)])
-      .then(() => {
-        scheduleBlink();
-        scheduleAmbientMotion();
-      })
-      .catch((error) => showToast(`角色图片加载失败：${error.message || error}`));
-  }
+  setPetVisualsVisible(shouldShowPetVisuals(config)).catch((error) =>
+    showToast(`角色图片加载失败：${error.message || error}`)
+  );
   scheduleScanning();
   window.setTimeout(tick, 0);
   window.setTimeout(() => tickMarket({ force: true }), 360);

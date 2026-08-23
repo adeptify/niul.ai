@@ -185,7 +185,7 @@
         <header class="settings-head">
           <div>
             <h2 id="settingsTitle">桌宠设置</h2>
-            <p>让牛来、马来，或者它们一起陪着。</p>
+            <p>让牛来、马来，或者只留一张安静的状态气泡。</p>
           </div>
           <button class="icon-button light" id="closeSettings" type="button" aria-label="关闭设置">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
@@ -197,6 +197,13 @@
           <button type="button" data-settings-tab="market">大盘</button>
         </nav>
         <section class="settings-panel" data-settings-panel="appearance" aria-labelledby="scaleSettingsTitle">
+          <label class="preference-toggle pet-visuals-toggle">
+            <span>
+              <strong>显示桌宠形象</strong>
+              <small>关闭后牛、马和牛群一起回棚，只保留 Session 状态气泡。</small>
+            </span>
+            <input id="showPetVisuals" type="checkbox" checked />
+          </label>
           <fieldset class="pet-mode-settings">
             <legend>桌宠组合</legend>
             <p>切换后，状态、拖动、说话和五连点彩蛋会一起换角色。</p>

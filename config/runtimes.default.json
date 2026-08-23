@@ -1,9 +1,10 @@
 {
-  "configVersion": 8,
+  "configVersion": 9,
   "pollMs": 5000,
   "globalShortcut": "CommandOrControl+Shift+U",
   "petMode": "cow",
   "herdMode": false,
+  "showPetVisuals": true,
   "cowScale": 1,
   "bubbleScale": 1,
   "soundEnabled": true,
