@@ -1,6 +1,10 @@
 (() => {
-  function shouldIgnoreMouse({ pointerActive = false, overInteractiveSurface = false } = {}) {
-    return !pointerActive && !overInteractiveSurface;
+  function shouldIgnoreMouse({
+    pointerActive = false,
+    overInteractiveSurface = false,
+    passthroughReady = true,
+  } = {}) {
+    return passthroughReady && !pointerActive && !overInteractiveSurface;
   }
 
   const mousePassthrough = Object.freeze({ shouldIgnoreMouse });

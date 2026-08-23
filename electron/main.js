@@ -30,6 +30,7 @@ const {
   normalizeInteractiveRegions,
   pointInInteractiveRegions,
 } = require("./pointer-regions");
+const { cachedSnapshotAfterFailure } = require("./scan-recovery");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
@@ -46,7 +47,9 @@ let scanWorker;
 let scanInFlight;
 let scanRequestId = 0;
 let windowDrag = null;
-let ignoreMouseRequested = true;
+// Keep the first visible frame interactive. The renderer enables click-through
+// only after it has measured the bubble and actor surfaces.
+let ignoreMouseRequested = false;
 let mouseEventsIgnored = null;
 let interactiveRegions = [];
 let lastSnapshot = null;
@@ -179,13 +182,28 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.once("ready-to-show", () => win && win.showInactive());
+  win.once("ready-to-show", () => {
+    if (!win) return;
+    applyIgnoreMouse(false);
+    win.showInactive();
+  });
   win.on("closed", () => {
     win = null;
     mouseEventsIgnored = null;
     interactiveRegions = [];
   });
-  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  const herdPreview = process.env.NIULAI_HERD_PREVIEW === "1";
+  const herdMode = process.env.NIULAI_HERD_MODE === "1";
+  const herdCount = ["1", "8", "34"].includes(process.env.NIULAI_HERD_COUNT)
+    ? process.env.NIULAI_HERD_COUNT
+    : "8";
+  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"), {
+    query: herdPreview
+      ? { herdPreview: "1", herdCount }
+      : herdMode
+        ? { herdMode: "1" }
+        : undefined,
+  });
 }
 
 function finishScan(message = {}) {
@@ -199,7 +217,8 @@ function finishScan(message = {}) {
     return;
   }
   const error = new Error(message.error?.message || "Session scan failed");
-  if (lastSnapshot) resolve(lastSnapshot);
+  const fallback = cachedSnapshotAfterFailure(lastSnapshot, error);
+  if (fallback) resolve(fallback);
   else reject(error);
 }
 
@@ -246,7 +265,7 @@ function cursorIsOverInteractiveSurface() {
   return pointInInteractiveRegions(
     { x: cursor.x - bounds.x, y: cursor.y - bounds.y },
     interactiveRegions,
-    8
+    18
   );
 }
 
@@ -327,7 +346,7 @@ app.whenReady().then(() => {
   registerGlobalShortcut();
   scheduleBackgroundScanning();
   memoTimer = setInterval(announceDueMemos, 15000);
-  mouseGuardTimer = setInterval(() => applyIgnoreMouse(ignoreMouseRequested), 50);
+  mouseGuardTimer = setInterval(() => applyIgnoreMouse(ignoreMouseRequested), 16);
 
   const iconPath = path.join(__dirname, "..", "assets", "tray-template.svg");
   const icon = nativeImage.createFromPath(iconPath);

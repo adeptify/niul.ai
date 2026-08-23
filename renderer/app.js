@@ -191,6 +191,7 @@ const MOOD_COPY = {
 const PREVIEW_CONFIG = {
   pollMs: 5000,
   petMode: "cow",
+  herdMode: false,
   cowScale: 1,
   bubbleScale: 1,
   soundEnabled: true,
@@ -348,6 +349,14 @@ function previewApi() {
 }
 
 const api = window.niulai || previewApi();
+const herdPreviewParams = new URLSearchParams(window.location.search);
+const herdPreviewActive =
+  herdPreviewParams.get("herdPreview") === "1" && Boolean(window.niulaiHerdPreview);
+const herdModeForced =
+  herdPreviewParams.get("herdMode") === "1" &&
+  Boolean(window.niulaiHerdMode) &&
+  Boolean(window.niulaiHerdRuntime) &&
+  Boolean(window.niulaiHerdPreview);
 const imageCache = new Map();
 const processedImageCache = new Map();
 const characterFrames = {
@@ -408,6 +417,14 @@ const grassAlerts = createGrassAlertTracker(localStorage);
 let latestMarketSnapshot = null;
 let pendingMarketReaction = null;
 let priorityBusyUntil = 0;
+let herdPreviewController = null;
+let herdFocusedSessionId = "";
+let herdRuntimeController = null;
+let herdRuntimeState = window.niulaiHerdMode?.createEmptyHerdState?.() || null;
+let herdModeActive = false;
+let cowInteractionCleanup = null;
+let passthroughReady = false;
+let lastScanError = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -442,19 +459,27 @@ async function prepareCowFrame(src) {
       preparedContext.drawImage(image, 0, 0, prepared.width, prepared.height);
       const imageData = preparedContext.getImageData(0, 0, prepared.width, prepared.height);
       const pixels = imageData.data;
-      for (let index = 0; index < pixels.length; index += 4) {
-        const red = pixels[index];
-        const green = pixels[index + 1];
-        const blue = pixels[index + 2];
-        const magenta = Math.min(red, blue) - green;
-        if (red > 145 && blue > 145 && magenta > 52) {
-          const removal = Math.min(1, Math.max(0, (magenta - 52) / 54));
-          pixels[index + 3] = Math.round(pixels[index + 3] * (1 - removal));
-          if (removal < 1) {
-            const clean = Math.max(green, Math.min(red, blue) * 0.56);
-            pixels[index] = Math.round(red * (1 - removal) + clean * removal);
-            pixels[index + 2] = Math.round(blue * (1 - removal) + clean * removal);
+      const rowStride = prepared.width * 4;
+      for (let y = 0; y < prepared.height; y += 1) {
+        const rowEnd = (y + 1) * rowStride;
+        for (let index = y * rowStride; index < rowEnd; index += 4) {
+          const red = pixels[index];
+          const green = pixels[index + 1];
+          const blue = pixels[index + 2];
+          const magenta = Math.min(red, blue) - green;
+          if (red > 145 && blue > 145 && magenta > 52) {
+            const removal = Math.min(1, Math.max(0, (magenta - 52) / 54));
+            pixels[index + 3] = Math.round(pixels[index + 3] * (1 - removal));
+            if (removal < 1) {
+              const clean = Math.max(green, Math.min(red, blue) * 0.56);
+              pixels[index] = Math.round(red * (1 - removal) + clean * removal);
+              pixels[index + 2] = Math.round(blue * (1 - removal) + clean * removal);
+            }
           }
+        }
+        // Chroma-keying several herd skins must never monopolize the renderer.
+        if (y > 0 && y % 84 === 0) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
         }
       }
       preparedContext.putImageData(imageData, 0, 0);
@@ -858,6 +883,7 @@ function marketReactionCopy(event) {
 
 function marketReactionIsBlocked() {
   const stage = document.getElementById("cowStage");
+  if (herdModeActive) return Boolean(activeBubbleOverlay);
   return (
     Date.now() < priorityBusyUntil ||
     Boolean(pointerDown) ||
@@ -893,6 +919,12 @@ function flushMarketReaction() {
   }
 
   pendingMarketReaction = null;
+  const suffix = event.additionalCount ? ` 另外 ${event.additionalCount} 个指数也有动静。` : "";
+  if (herdModeActive) {
+    announceHerdMarket(`${marketReactionCopy(event)}${suffix}`, 3600);
+    if (event.band >= 1) playCowMoo("short");
+    return;
+  }
   const stage = document.getElementById("cowStage");
   const className = event.direction === "up" ? "is-market-reacting-up" : "is-market-reacting-down";
   stage.classList.remove("is-market-reacting-up", "is-market-reacting-down");
@@ -902,7 +934,6 @@ function flushMarketReaction() {
     () => stage.classList.remove("is-market-reacting-up", "is-market-reacting-down"),
     820
   );
-  const suffix = event.additionalCount ? ` 另外 ${event.additionalCount} 个指数也有动静。` : "";
   showCaption(`${marketReactionCopy(event)}${suffix}`, 3600, {
     speechDuration: event.band >= 1 ? 1300 : 900,
   });
@@ -1154,7 +1185,8 @@ async function saveQuickMemo() {
   input.value = "";
   updateMemoReminder("0");
   await renderMemos();
-  showCaption(remindAt ? "到点我叫你。" : "记住了。", 1700);
+  const savedMessage = remindAt ? "记下了。到点我叫你。" : "记下了，我替你惦记。";
+  if (!announceHerdMemo(savedMessage, 2200)) showCaption(savedMessage, 1700);
   showToast(remindAt ? "Memo 已保存并设置提醒" : "Memo 已保存");
 }
 
@@ -1361,6 +1393,11 @@ function renderSessionRows(snapshot) {
     .join("");
 
   for (const element of list.querySelectorAll(".session-row")) {
+    element.classList.toggle(
+      "is-herd-focus",
+      (herdPreviewActive || herdModeActive) &&
+        String(element.dataset.id) === herdFocusedSessionId
+    );
     const open = () => openSession(element.dataset.id, element);
     element.addEventListener("click", open);
     element.addEventListener("pointerenter", () => pointCowAt(element));
@@ -1424,6 +1461,313 @@ function renderList(snapshot) {
   renderRuntimeFilters(snapshot.rows);
   renderSessionRows(snapshot);
   return true;
+}
+
+function herdSnapshotForActors(actors) {
+  const rows = actors
+    .filter((actor) => actor.kind === "session")
+    .map((actor, index) => ({
+      id: actor.targetId,
+      runtime: actor.runtimeId || `preview-${index}`,
+      label: actor.runtimeLabel || actor.shortLabel || "Agent",
+      status: actor.status,
+      cwdName: actor.project || `herd-project-${index + 1}`,
+      cwd: `/Users/you/code/${actor.project || `herd-project-${index + 1}`}`,
+      title: actor.caption,
+      workSummary: actor.status === "waiting" ? "等你接着走" : "牛群切片里的真实职责映射",
+      mtime: Date.now() - index * 37_000,
+    }));
+  const counts = { working: 0, waiting: 0, idle: 0, offline: 0 };
+  for (const row of rows) counts[row.status] = (counts[row.status] || 0) + 1;
+  return {
+    ...PREVIEW_SNAPSHOT,
+    scannedAt: Date.now(),
+    mood: counts.working ? "working" : counts.waiting ? "waiting" : counts.idle ? "idle" : "offline",
+    counts,
+    rows,
+  };
+}
+
+function syncHerdPreviewRows() {
+  if (!herdPreviewController) return;
+  const sessionIds = new Set(
+    herdPreviewController.actors
+      .filter((actor) => actor.kind === "session")
+      .map((actor) => String(actor.targetId))
+  );
+  if (herdFocusedSessionId && !sessionIds.has(herdFocusedSessionId)) {
+    herdFocusedSessionId = "";
+  }
+  lastListRenderKey = "";
+  renderList(herdSnapshotForActors(herdPreviewController.actors));
+}
+
+function focusHerdSession(targetId) {
+  herdFocusedSessionId = String(targetId);
+  if (!latestSnapshot?.rows?.some((row) => String(row.id) === String(targetId))) {
+    syncHerdPreviewRows();
+  }
+  setActiveBubbleOverlay(null);
+  setPetMenuOpen(false);
+  setBubbleCollapsed(false, { silent: true });
+  activeStatusFilter = "all";
+  activeRuntimeFilter = "all";
+  localStorage.setItem("niulai.statusFilter", activeStatusFilter);
+  localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
+  if (latestSnapshot) {
+    renderRuntimeFilters(latestSnapshot.rows);
+    renderStatusFilters(latestSnapshot.rows);
+    renderSummary(latestSnapshot);
+    renderSessionRows(latestSnapshot);
+  }
+  document.querySelector(".session-row.is-herd-focus")?.classList.remove("is-herd-focus");
+  const row = Array.from(document.querySelectorAll(".session-row")).find(
+    (element) => String(element.dataset.id) === String(targetId)
+  );
+  if (!row) {
+    showToast("这头牛认领的 Session 暂时不在列表里");
+    return;
+  }
+  row.classList.add("is-herd-focus");
+  row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  showToast("已亮出它认领的 Session；点列表才会切换 Runtime");
+}
+
+function mountHerdSlice() {
+  if (!herdPreviewActive || herdPreviewController) return;
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  pet.dataset.herdPreview = "true";
+  pet.dataset.petMode = "cow";
+  petMode = "cow";
+  const count = window.niulaiHerdPreview.normalizePreviewCount(
+    herdPreviewParams.get("herdCount")
+  );
+  herdPreviewController = window.niulaiHerdPreview.mountHerdPreview({
+    stage,
+    count,
+    skins: COW_SKINS.map((skin) => ({ ...skin, src: cowSource(skin, "waiting") })),
+    soundEnabled: config?.soundEnabled !== false,
+    actorScale: normalizedScale(config?.cowScale),
+    prepareFrame: prepareCowFrame,
+    drawFrame: drawPreparedFrame,
+    onArmAudio: armPetAudio,
+    onGroupMoo: (kind) => playCowMoo(kind),
+    onSingleMoo: (kind) => playCowMoo(kind),
+    onOpenMemo: openMemoPanel,
+    onOpenMarket: openMarketPanel,
+    onFocusSession: focusHerdSession,
+    onMarathonToggle: toggleMooMarathon,
+    onSoundChange: (enabled) => setCowSoundEnabled(enabled),
+    onCountChange: (nextCount) => {
+      herdPreviewParams.set("herdCount", String(nextCount));
+      window.history.replaceState({}, "", `${window.location.pathname}?${herdPreviewParams}`);
+      queueMicrotask(syncHerdPreviewRows);
+      requestAnimationFrame(syncInteractiveRegions);
+    },
+    onLayoutChange: syncInteractiveRegions,
+    getBounds: () => cowBoundsInWindow(stage),
+    onDragStart: ({ originX, originY, screenX, screenY, bounds }) =>
+      api.startWindowDrag({ originX, originY, screenX, screenY, cowBounds: bounds }),
+    onDragMove: (screenX, screenY, bounds) => api.moveWindowDrag(screenX, screenY, bounds),
+    onDragEnd: () => api.endWindowDrag(),
+  });
+  const roll = document.getElementById("rollCow");
+  roll.disabled = false;
+  roll.setAttribute("aria-disabled", "false");
+  roll.setAttribute("aria-label", "重抽所有 Session 牛造型");
+  roll.title = "Roll 全群 Session 牛";
+  syncHerdPreviewRows();
+  requestAnimationFrame(syncInteractiveRegions);
+}
+
+function herdSkinOptions() {
+  return COW_SKINS.map((skin) => ({ ...skin, src: cowSource(skin, "waiting") }));
+}
+
+function mountHerdRuntime() {
+  if (herdRuntimeController) return;
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  herdModeActive = true;
+  pet.dataset.herdMode = "true";
+  pet.dataset.petMode = "cow";
+  stage.dataset.herdMode = "true";
+  petMode = "cow";
+  herdRuntimeController = window.niulaiHerdPreview.mountHerdPreview({
+    stage,
+    actors: [],
+    introduceOnMount: false,
+    previewMode: false,
+    showToolbar: false,
+    skins: herdSkinOptions(),
+    soundEnabled: config?.soundEnabled !== false,
+    actorScale: normalizedScale(config?.cowScale),
+    prepareFrame: prepareCowFrame,
+    drawFrame: drawPreparedFrame,
+    onArmAudio: armPetAudio,
+    onGroupMoo: (kind) => playCowMoo(kind),
+    onSingleMoo: (kind) => playCowMoo(kind),
+    onOpenMemo: openMemoPanel,
+    onOpenMarket: openMarketPanel,
+    onFocusSession: focusHerdSession,
+    onMarathonToggle: toggleMooMarathon,
+    onActorsChange: (actors, event) => {
+      if (event?.type !== "roll" || !herdRuntimeState) return;
+      herdRuntimeState = {
+        ...herdRuntimeState,
+        actors,
+        skinMemory: {
+          ...(herdRuntimeState.skinMemory || {}),
+          ...Object.fromEntries(
+            actors
+              .filter((actor) => actor.kind === "session")
+              .map((actor) => [actor.id, actor.skinId])
+          ),
+        },
+        revision: (herdRuntimeState.revision || 0) + 1,
+      };
+    },
+    onLayoutChange: syncInteractiveRegions,
+    getBounds: () => cowBoundsInWindow(stage),
+    onDragStart: ({ originX, originY, screenX, screenY, bounds }) =>
+      api.startWindowDrag({ originX, originY, screenX, screenY, cowBounds: bounds }),
+    onDragMove: (screenX, screenY, bounds) => api.moveWindowDrag(screenX, screenY, bounds),
+    onDragEnd: () => api.endWindowDrag(),
+  });
+  const roll = document.getElementById("rollCow");
+  roll.disabled = false;
+  roll.setAttribute("aria-disabled", "false");
+  roll.setAttribute("aria-label", "重抽所有 Session 牛造型");
+  roll.title = "Roll 全群 Session 牛";
+  requestAnimationFrame(syncInteractiveRegions);
+}
+
+function stopSinglePetMotion() {
+  for (const timer of [blinkTimer, ambientMotionTimer, ambientMotionEndTimer, expressionTimer]) {
+    window.clearTimeout(timer);
+  }
+  blinkTimer = null;
+  ambientMotionTimer = null;
+  ambientMotionEndTimer = null;
+  expressionTimer = null;
+}
+
+async function setHerdModeEnabled(enabled) {
+  const next = Boolean(enabled);
+  if (next === herdModeActive) return;
+  const stage = document.getElementById("cowStage");
+  const pet = document.getElementById("pet");
+  if (next) {
+    cowInteractionCleanup?.();
+    stopSinglePetMotion();
+    if (mooMarathonEndsAt) stopMooMarathon(false);
+    mountHerdRuntime();
+    reconcileHerdRuntime(latestSnapshot);
+  } else {
+    herdRuntimeController?.destroy();
+    herdRuntimeController = null;
+    herdRuntimeState = window.niulaiHerdMode.createEmptyHerdState();
+    herdModeActive = false;
+    delete pet.dataset.herdMode;
+    delete stage.dataset.herdMode;
+    delete stage.dataset.herdReadyMs;
+    delete stage.dataset.herdFirstReadyMs;
+    stage.setAttribute("role", "button");
+    stage.setAttribute("tabindex", "0");
+    stage.setAttribute(
+      "aria-label",
+      "牛来。单击展开状态，拖动移动，双击抚摸，右键快速记事"
+    );
+    await applyPetMode(config?.petMode);
+    await setCow(latestSnapshot?.mood || mood || "waiting", true);
+    bindCowInteraction();
+    scheduleBlink();
+    scheduleAmbientMotion();
+    syncRollControl();
+  }
+  requestAnimationFrame(syncInteractiveRegions);
+  syncMousePassthrough();
+}
+
+function reconcileHerdRuntime(snapshot, { announceEntries = true } = {}) {
+  if (!herdModeActive || !herdRuntimeController || !snapshot) return null;
+  const previous = herdRuntimeState || window.niulaiHerdMode.createEmptyHerdState();
+  const next = window.niulaiHerdRuntime.reconcileSnapshot(snapshot, previous, {
+    skins: herdSkinOptions(),
+    marketEnabled: config?.market?.enabled !== false,
+    marketStatus: latestMarketSnapshot?.status,
+  });
+  herdRuntimeState = next;
+  herdRuntimeController.updateActors(next.actors, {
+    introducedIds: announceEntries ? next.transitions.entered : [],
+    announce: announceEntries,
+  });
+  for (const actorId of next.transitions.exiting) {
+    const actor = next.actors.find((item) => item.id === actorId);
+    if (actor) herdRuntimeController.announceActor(actorId, actor.caption, 1800);
+  }
+  requestAnimationFrame(syncInteractiveRegions);
+  return next;
+}
+
+function announceHerdStatusChanges(previousRows, nextRows) {
+  if (!hasInitialSnapshot || !chatterEnabled || !herdModeActive) return false;
+  const changes = window.niulaiHerdRuntime.changedSessionRows(previousRows, nextRows);
+  let delivered = false;
+  for (const row of changes) {
+    if (row.status === "offline") {
+      delivered = true;
+      continue;
+    }
+    const route = window.niulaiHerdRuntime.routeSessionEvent(
+      herdRuntimeState?.actors,
+      row,
+      "status"
+    );
+    if (!route) continue;
+    delivered = herdRuntimeController?.announceActor(
+      route.actorId,
+      window.niulaiHerdRuntime.sessionStatusMessage(row),
+      3600
+    ) || delivered;
+  }
+  return delivered;
+}
+
+function announceHerdWaitingReminder(reminder) {
+  if (!reminder?.id) return false;
+  if (!chatterEnabled) {
+    api.completeWaitingNudge?.(reminder.id, false);
+    return false;
+  }
+  const route = window.niulaiHerdRuntime.routeWaitingReminder(
+    herdRuntimeState?.actors,
+    reminder
+  );
+  const delivered = Boolean(
+    route && herdRuntimeController?.announceActor(route.actorId, reminder.text, 4200)
+  );
+  api.completeWaitingNudge?.(reminder.id, delivered);
+  return delivered;
+}
+
+function announceHerdMemo(message, duration = 1800) {
+  if (!herdModeActive) return false;
+  const route = window.niulaiHerdRuntime.routeMemoEvent(
+    herdRuntimeState?.actors,
+    "memo"
+  );
+  return Boolean(route && herdRuntimeController?.announceActor(route.actorId, message, duration));
+}
+
+function announceHerdMarket(message, duration = 3600) {
+  if (!herdModeActive) return false;
+  const route = window.niulaiHerdRuntime.routeMarketEvent(
+    herdRuntimeState?.actors,
+    "market"
+  );
+  return Boolean(route && herdRuntimeController?.announceActor(route.actorId, message, duration));
 }
 
 async function openSession(id, element) {
@@ -1604,10 +1948,37 @@ async function tick() {
   beacon.classList.add("is-scanning");
   beacon.title = "正在扫描";
   try {
-    const snapshot = await api.scan();
+    const scannedSnapshot = await api.scan();
+    const snapshot =
+      herdPreviewActive && herdPreviewController
+        ? herdSnapshotForActors(herdPreviewController.actors)
+        : scannedSnapshot;
     const previousRows = latestRows;
     const now = Date.now();
     renderList(snapshot);
+    if (snapshot.scanError) {
+      document.getElementById("statusLine").textContent = "沿用上次巡视";
+      beacon.title = `扫描暂时失败：${snapshot.scanError}`;
+      if (lastScanError !== snapshot.scanError) {
+        showToast(`扫描暂时失败，牛群继续守着上次结果：${snapshot.scanError}`);
+      }
+      lastScanError = snapshot.scanError;
+    } else {
+      lastScanError = "";
+    }
+    if (herdPreviewActive) {
+      hasInitialSnapshot = true;
+      beacon.title = "牛群切片数据已就绪";
+      return;
+    }
+    if (herdModeActive) {
+      reconcileHerdRuntime(snapshot);
+      const statusSpoke = announceHerdStatusChanges(previousRows, snapshot.rows || []);
+      const nudgeSpoke = announceHerdWaitingReminder(snapshot.waitingReminder);
+      hasInitialSnapshot = true;
+      if (!snapshot.scanError) beacon.title = "牛群巡视正常";
+      return;
+    }
     await setCow(snapshot.mood);
     syncWaitAttention(snapshot.rows || []);
     const statusSpoke = announceStatusChanges(previousRows, snapshot.rows || []);
@@ -1619,6 +1990,16 @@ async function tick() {
   } catch (error) {
     document.getElementById("statusLine").textContent = "扫描暂时失败";
     beacon.title = "扫描失败";
+    if (herdModeActive) {
+      const fallback = latestSnapshot || {
+        rows: [],
+        counts: { working: 0, waiting: 0, idle: 0, offline: 0 },
+        mood: "offline",
+        tokenUsage: { tokens: 0, sources: [] },
+        scannedAt: Date.now(),
+      };
+      reconcileHerdRuntime(fallback);
+    }
     showToast(`扫描失败：${error.message || error}`);
   } finally {
     tickInFlight = false;
@@ -1648,10 +2029,15 @@ async function tickMarket({ force = false } = {}) {
   }
   marketTickInFlight = true;
   let nextPollMs = 60_000;
+  const previousMarketStatus = latestMarketSnapshot?.status;
   try {
     const snapshot = await api.getMarketSnapshot({ force });
     nextPollMs = snapshot.nextPollMs || nextPollMs;
     renderMarket(snapshot);
+    reconcileHerdRuntime(latestSnapshot, { announceEntries: false });
+    if (herdModeActive && snapshot.status === "unavailable" && previousMarketStatus !== "unavailable") {
+      announceHerdMarket("行情暂时没回来，我还守着。", 3200);
+    }
     if (snapshot.reaction) queueMarketReaction(snapshot.reaction);
   } catch (error) {
     renderMarket({
@@ -1660,6 +2046,10 @@ async function tickMarket({ force = false } = {}) {
       error: String(error?.message || error),
       quotes: [],
     });
+    reconcileHerdRuntime(latestSnapshot, { announceEntries: false });
+    if (herdModeActive && previousMarketStatus !== "unavailable") {
+      announceHerdMarket("行情暂时没回来，我还守着。", 3200);
+    }
   } finally {
     marketTickInFlight = false;
     scheduleMarketPolling(nextPollMs);
@@ -1804,6 +2194,8 @@ function syncMooMarathon() {
   const running = mooMarathonEndsAt > Date.now();
   badge.hidden = !running;
   document.getElementById("cowStage")?.classList.toggle("is-moo-marathon", running);
+  herdPreviewController?.setMarathon(running);
+  herdRuntimeController?.setMarathon(running);
   document.getElementById("marathonLabel").textContent = activePetProfile().marathonLabel;
   if (running) document.getElementById("mooMarathonTime").textContent = marathonRemainingText();
 }
@@ -1873,6 +2265,9 @@ function cowBoundsInWindow(stage) {
 function bindCowInteraction() {
   const stage = document.getElementById("cowStage");
   const pet = document.getElementById("pet");
+  if (herdPreviewActive || herdModeActive || cowInteractionCleanup) return;
+  const listenerAbort = new AbortController();
+  const listenerOptions = { signal: listenerAbort.signal };
   let dragFrame = 0;
   let pendingCursor = null;
 
@@ -1899,6 +2294,7 @@ function bindCowInteraction() {
   const beginWindowDrag = (event) => {
     pointerDown.dragging = true;
     stage.classList.add("is-dragging");
+    stage.dataset.dragState = "moving";
     const cowBounds = cowBoundsInWindow(stage);
     api.startWindowDrag({
       originX: pointerDown.screenX,
@@ -1942,14 +2338,14 @@ function bindCowInteraction() {
     const lookY = ((event.clientY - rect.top) / rect.height - 0.5) * 4;
     pet.style.setProperty("--look-x", `${lookX.toFixed(2)}px`);
     pet.style.setProperty("--look-y", `${lookY.toFixed(2)}px`);
-  });
+  }, listenerOptions);
 
   stage.addEventListener("pointerleave", () => {
     if (!pointerDown) {
       pet.style.setProperty("--look-x", "0px");
       pet.style.setProperty("--look-y", "0px");
     }
-  });
+  }, listenerOptions);
 
   stage.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -1963,7 +2359,7 @@ function bindCowInteraction() {
       clientY: event.clientY,
       dragging: false,
     };
-  });
+  }, listenerOptions);
 
   const finishPointer = (event) => {
     if (!pointerDown) return;
@@ -1974,7 +2370,11 @@ function bindCowInteraction() {
     pointerDown = null;
     cancelQueuedDrag();
     stage.classList.remove("is-dragging");
-    if (wasDragging) api.endWindowDrag();
+    if (wasDragging) {
+      api.endWindowDrag();
+      stage.dataset.dragState = "ended";
+      showCaption("换块地儿，继续盯。", 1200, { speak: false });
+    }
     if (stage.hasPointerCapture?.(pointerId)) {
       try {
         stage.releasePointerCapture(pointerId);
@@ -1988,28 +2388,28 @@ function bindCowInteraction() {
     }, 0);
   };
 
-  stage.addEventListener("pointerup", finishPointer);
-  stage.addEventListener("pointercancel", finishPointer);
-  stage.addEventListener("lostpointercapture", finishPointer);
-  window.addEventListener("blur", finishPointer);
+  stage.addEventListener("pointerup", finishPointer, listenerOptions);
+  stage.addEventListener("pointercancel", finishPointer, listenerOptions);
+  stage.addEventListener("lostpointercapture", finishPointer, listenerOptions);
+  window.addEventListener("blur", finishPointer, listenerOptions);
 
   stage.addEventListener("click", () => {
     if (suppressClick) return;
     if (registerCowClick()) return;
     window.clearTimeout(cowClickTimer);
     cowClickTimer = window.setTimeout(toggleBubble, 230);
-  });
+  }, listenerOptions);
 
   stage.addEventListener("dblclick", () => {
     if (suppressClick) return;
     window.clearTimeout(cowClickTimer);
     petCow();
-  });
+  }, listenerOptions);
 
   stage.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     openMemoPanel();
-  });
+  }, listenerOptions);
 
   stage.addEventListener("keydown", (event) => {
     if (event.key.toLowerCase() === "m") {
@@ -2023,7 +2423,14 @@ function bindCowInteraction() {
       if (event.shiftKey) petCow();
       else toggleBubble();
     }
-  });
+  }, listenerOptions);
+
+  cowInteractionCleanup = () => {
+    listenerAbort.abort();
+    finishPointer();
+    cancelQueuedDrag();
+    cowInteractionCleanup = null;
+  };
 }
 
 function bindMemo() {
@@ -2060,7 +2467,9 @@ function bindMemo() {
   if (typeof api.onMemoDue === "function") {
     api.onMemoDue((memo) => {
       markPriorityBusy(5000);
-      showCaption(`提醒：${memo.text}`, 5000);
+      if (!announceHerdMemo(`你让我惦记的到点了：${memo.text}`, 5000)) {
+        showCaption(`提醒：${memo.text}`, 5000);
+      }
       showToast("有一条 Memo 到时间了");
       if (!panel.hidden) renderMemos();
     });
@@ -2075,7 +2484,11 @@ function normalizedScale(value, fallback = 1) {
 function applyDisplayScale(nextConfig) {
   const pet = document.getElementById("pet");
   const cowScale = normalizedScale(nextConfig?.cowScale);
-  pet.style.setProperty("--cow-scale", String(cowScale));
+  const internalHerdScale =
+    herdPreviewActive || herdModeForced || herdModeActive || nextConfig?.herdMode === true;
+  pet.style.setProperty("--cow-scale", String(internalHerdScale ? 1 : cowScale));
+  herdPreviewController?.setActorScale(cowScale);
+  herdRuntimeController?.setActorScale(cowScale);
   pet.style.setProperty("--bubble-scale", String(normalizedScale(nextConfig?.bubbleScale)));
   pet.classList.toggle("is-pet-scale-large", cowScale > 1.1);
 }
@@ -2120,6 +2533,7 @@ function fillSettings(nextConfig) {
   const mode = normalizePetMode(nextConfig.petMode);
   const modeInput = document.querySelector(`input[name="petMode"][value="${CSS.escape(mode)}"]`);
   if (modeInput) modeInput.checked = true;
+  document.getElementById("herdMode").checked = nextConfig.herdMode === true;
   syncScaleControls(nextConfig);
   document.getElementById("soundEnabled").checked = nextConfig.soundEnabled !== false;
   const market = nextConfig.market || {};
@@ -2215,7 +2629,7 @@ function addCustomRuntime() {
 
 function closeSettings() {
   applyDisplayScale(config);
-  applyPetMode(config.petMode);
+  if (!herdModeActive) applyPetMode(config.petMode);
   setSettingsMessage("修改会在保存并重扫后生效。");
   setActiveBubbleOverlay(null);
   syncInteractiveRegions();
@@ -2232,6 +2646,7 @@ async function saveSettings() {
   next.petMode = normalizePetMode(
     document.querySelector('input[name="petMode"]:checked')?.value
   );
+  next.herdMode = document.getElementById("herdMode").checked;
   next.soundEnabled = document.getElementById("soundEnabled").checked;
   next.market = {
     ...(next.market || {}),
@@ -2244,9 +2659,13 @@ async function saveSettings() {
   };
   next.custom = structuredClone(draftCustom);
   setSettingsMessage("正在保存…");
+  const wasHerdMode = herdModeActive;
   config = await api.saveConfig(next);
   setCowSoundEnabled(config.soundEnabled !== false);
-  await applyPetMode(config.petMode);
+  herdRuntimeController?.setSound(config.soundEnabled !== false);
+  const shouldEnableHerd = herdModeForced || config.herdMode === true;
+  await setHerdModeEnabled(shouldEnableHerd);
+  if (!shouldEnableHerd && !wasHerdMode) await applyPetMode(config.petMode);
   applyDisplayScale(config);
   if (config.market?.enabled === false || config.market?.reactionsEnabled === false) {
     pendingMarketReaction = null;
@@ -2296,7 +2715,7 @@ function bindSettings() {
   );
   for (const input of document.querySelectorAll('input[name="petMode"]')) {
     input.addEventListener("change", () => {
-      if (input.checked) applyPetMode(input.value);
+      if (input.checked && !herdModeActive) applyPetMode(input.value);
     });
   }
   document.getElementById("showCustomEditor").addEventListener("click", showCustomEditor);
@@ -2376,6 +2795,7 @@ function syncMousePassthrough() {
     shouldIgnoreMouse({
       pointerActive: Boolean(pointerDown),
       overInteractiveSurface: isOverInteractiveSurface(),
+      passthroughReady,
     })
   );
 }
@@ -2406,8 +2826,15 @@ function armMousePassthrough() {
     });
   }
   window.addEventListener("resize", syncInteractiveRegions);
+  passthroughReady = false;
+  api.setIgnoreMouse(false);
   syncInteractiveRegions();
-  api.setIgnoreMouse(true);
+  window.setTimeout(() => {
+    passthroughReady = true;
+    syncInteractiveRegions();
+    syncMousePassthrough();
+    document.documentElement.dataset.passthroughReady = "true";
+  }, 260);
 }
 
 function scheduleScanning() {
@@ -2421,7 +2848,9 @@ function bindTopControls() {
   document.getElementById("rollCow").addEventListener("click", (event) => {
     event.stopPropagation();
     setPetMenuOpen(false);
-    rollCow();
+    if (herdPreviewController) herdPreviewController.roll();
+    else if (herdRuntimeController) herdRuntimeController.roll();
+    else rollCow();
   });
   document.getElementById("petMenuButton").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -2509,6 +2938,7 @@ function bindTopControls() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  performance.mark("niulai-interaction-bind-start");
   if (!COW_SKINS.some((skin) => skin.id === currentSkinId)) currentSkinId = "original";
   applyAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY) || "dark", { persist: false });
   setActiveSettingsTab("appearance");
@@ -2516,7 +2946,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   setBubbleCollapsed(collapsed, { silent: true });
   syncChatterMenu();
   if (typeof api.setChatterEnabled === "function") api.setChatterEnabled(chatterEnabled);
-  bindCowInteraction();
   bindMemo();
   bindSettings();
   bindTopControls();
@@ -2526,16 +2955,36 @@ window.addEventListener("DOMContentLoaded", async () => {
     toggleBubble();
   });
 
-  await setCow("waiting", true);
-  config = await api.getConfig();
+  // Let the visible shell and non-character controls paint before image
+  // chroma-keying, filesystem scans, or market I/O begin.
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  performance.mark("niulai-first-interactive-frame");
+  document.documentElement.dataset.interactive = "true";
+  document.documentElement.dataset.interactiveMs = String(Math.round(performance.now()));
+  try {
+    config = await api.getConfig();
+  } catch (error) {
+    config = structuredClone(PREVIEW_CONFIG);
+    showToast(`读取配置失败，先用默认设置：${error.message || error}`);
+  }
   setCowSoundEnabled(config.soundEnabled !== false);
-  await applyPetMode(config.petMode);
   applyDisplayScale(config);
   fillSettings(config);
-  await tick();
-  await tickMarket({ force: true });
+  if (herdPreviewActive) {
+    mountHerdSlice();
+  } else if (herdModeForced || config.herdMode === true) {
+    mountHerdRuntime();
+  } else {
+    bindCowInteraction();
+    Promise.all([setCow("waiting", true), applyPetMode(config.petMode)])
+      .then(() => {
+        scheduleBlink();
+        scheduleAmbientMotion();
+      })
+      .catch((error) => showToast(`角色图片加载失败：${error.message || error}`));
+  }
   scheduleScanning();
-  scheduleBlink();
-  scheduleAmbientMotion();
+  window.setTimeout(tick, 0);
+  window.setTimeout(() => tickMarket({ force: true }), 360);
   if (typeof api.onRequestScan === "function") api.onRequestScan(tick);
 });

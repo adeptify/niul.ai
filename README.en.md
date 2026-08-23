@@ -9,8 +9,8 @@
 <h1 align="center">Your agent won't knock when it's done. The cow will.</h1>
 
 <p align="center">
-  Niul.ai is a slightly janky yellow cow that lives on your macOS desktop.<br>
-  It watches Cursor, Claude Code, Codex, and the rest—then tells you who is working and who is waiting.
+  One cow gives you the overview. When the agents multiply, bring in the herd.<br>
+  Every live session gets a cow of its own, and that cow watches nothing else.
 </p>
 
 <p align="center">
@@ -53,6 +53,26 @@ Niul.ai translates runtime activity into four deliberately simple states:
 The current app UI uses the Chinese labels above. They are cattle metaphors, not mysterious error codes.
 
 ## Built for an agent-heavy workflow
+
+### One cow for the overview. A herd for ownership.
+
+The original cow answers the urgent question: *which agent is waiting for me?* Once you are running enough sessions at the same time, a second question appears: *which work does this cow actually own?*
+
+Turn on **Herd Mode** and every working, waiting, or idle session is assigned a random cow. The assignment stays stable for that app run, and each new cow introduces the job it has taken. The current Chinese UI puts it plainly:
+
+> 这摊我盯着：Codex · niul.ai *(I’m watching this one.)*
+
+Quick Memo gets a specialist too; when Market is enabled, it gets one as well. The memo cow only handles saved notes and due reminders, while the market cow only reacts to quotes and market failures. A change in one session never makes the wrong cow speak.
+
+Clicking a session cow does not yank you away from the current app. Niul.ai first opens the bubble, reveals the full session list, scrolls to the bound row, and highlights it. Click that row when you actually want to switch runtimes. Drag any cow to move the herd, double-click to pet only that cow, or Roll the session cows into new outfits without changing their assignments.
+
+Herd Mode is off by default. Enable it under **Appearance & Sound**; turn it off and your previous cow, horse, or paired layout returns unchanged.
+
+<p align="center">
+  <img src="assets/niulai-herd-mode.jpg" width="72%" alt="Herd Mode assigns one cow to every AI session, plus dedicated Quick Memo and Market cows">
+  <br>
+  <sub>Mock sessions, rendered with the real herd layout, responsibility bubbles, and in-app character assets.</sub>
+</p>
 
 ### Event-aware, not just “the file changed recently”
 
@@ -203,14 +223,16 @@ The repository also includes [`安装牛来.command`](安装牛来.command), whi
 
 ## Everyday controls
 
-- **Click the cow:** expand or collapse the session bubble
+- **Click the single pet:** expand or collapse the session bubble
+- **Click a session cow in Herd Mode:** reveal and highlight its bound session; click the row to switch runtimes
+- **Click the memo or market cow:** open its dedicated panel
 - **Click a session:** bring its runtime to the foreground
 - **Hover a session:** show the status reason and turn the cow toward it
-- **Drag the cow:** move Niul.ai around the desktop
-- **Double-click the cow:** pet it
-- **Right-click the cow:** open Quick Memo
+- **Drag any cow:** move Niul.ai; in Herd Mode the whole herd moves together
+- **Double-click a cow:** pet it; in Herd Mode only the cow you touched reacts
+- **Right-click the single pet:** open Quick Memo
 - **Press `⌘⇧U`:** show or hide the app
-- **Open the gear:** choose runtimes, add a custom runtime, resize the cow and bubble, or configure market reactions
+- **Open the gear:** enable Herd Mode, choose a cow/horse layout, configure runtimes, resize the pet and bubble, or tune market reactions
 - **Open the power menu:** collapse, hide, or quit completely
 
 By default, the list prioritizes sessions waiting for you. If it looks empty, switch to another state or check the enabled runtimes in Settings.

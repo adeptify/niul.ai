@@ -338,6 +338,21 @@ test("appearance settings expose cow horse and combined pet modes", () => {
   assert.ok(html.includes('src="pet-mode.js"'));
 });
 
+test("appearance settings expose a reversible herd takeover without replacing petMode", () => {
+  const appearance = extract(
+    html,
+    'data-settings-panel="appearance"',
+    'data-settings-panel="scan"'
+  );
+  assert.match(appearance, /id="herdMode"\s+type="checkbox"/);
+  assert.match(appearance, /关闭后恢复上面的桌宠组合/);
+  assert.match(js, /next\.herdMode\s*=\s*document\.getElementById\("herdMode"\)\.checked/);
+  assert.match(js, /async function setHerdModeEnabled\(enabled\)/);
+  assert.match(js, /herdRuntimeController\?\.destroy\(\)/);
+  assert.match(js, /await applyPetMode\(config\?\.petMode\)/);
+  assert.equal(cssProperty(".herd-mode-toggle", "border-bottom"), "1px solid var(--hairline)");
+});
+
 test("horse mode shares speaking frames while combined mode mixes both calls", () => {
   assert.match(css, /\.cow-stage\.is-speaking \.horse-fx-mouth/);
   assert.match(css, /data-expression\^="attention"[^}]*\.horse-fx-mouth\s*\{[^}]*top\s*:\s*29\.5%/);

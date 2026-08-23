@@ -19,8 +19,9 @@ test("upgrades the legacy scan interval without resetting user preferences", () 
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 7);
+  assert.equal(config.configVersion, 8);
   assert.equal(config.petMode, "cow");
+  assert.equal(config.herdMode, false);
   assert.equal(config.pollMs, 5000);
   assert.equal(config.cowScale, 1.35);
   assert.equal(config.bubbleScale, 0.9);
@@ -50,4 +51,24 @@ test("merges partial market preferences with new defaults", () => {
     reactionsEnabled: false,
     thresholdPct: 0.5,
   });
+  assert.equal(config.herdMode, false);
+});
+
+test("preserves an enabled herd while upgrading without changing the saved pet mode", () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "niulai-config-"));
+  fs.writeFileSync(
+    path.join(userDataDir, "config.json"),
+    JSON.stringify({
+      configVersion: 7,
+      herdMode: true,
+      petMode: "both",
+      cowScale: 0.85,
+    })
+  );
+
+  const config = loadConfig(userDataDir);
+  assert.equal(config.configVersion, 8);
+  assert.equal(config.herdMode, true);
+  assert.equal(config.petMode, "both");
+  assert.equal(config.cowScale, 0.85);
 });

@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>牛群专属造型验收</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+        background: #171512;
+        color: #f4ecdf;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 1180px;
+        min-height: 100vh;
+        margin: 0;
+        padding: 34px 38px 42px;
+        background:
+          radial-gradient(circle at 14% 0%, rgba(215, 166, 48, 0.12), transparent 28%),
+          #171512;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 28px;
+      }
+
+      h1 {
+        margin: 0 0 7px;
+        font-size: 32px;
+        letter-spacing: -0.03em;
+      }
+
+      p {
+        margin: 0;
+        color: #b9ae9f;
+        font-size: 14px;
+      }
+
+      .facts {
+        display: flex;
+        gap: 8px;
+        color: #d7cbb8;
+        font-size: 12px;
+      }
+
+      .facts span {
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: #29251f;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 18px;
+      }
+
+      section {
+        min-height: 348px;
+        padding: 20px 22px 22px;
+        border-radius: 16px;
+      }
+
+      .dark {
+        background: #211e19;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.26);
+      }
+
+      .light {
+        color-scheme: light;
+        background: #f1eadf;
+        color: #28231d;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.16);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .section-head span {
+        color: #918678;
+        font-size: 11px;
+      }
+
+      .light .section-head span {
+        color: #6d6256;
+      }
+
+      .sizes {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr 0.82fr;
+        align-items: end;
+        gap: 12px;
+      }
+
+      figure {
+        display: grid;
+        min-width: 0;
+        place-items: center;
+        gap: 8px;
+        margin: 0;
+      }
+
+      .actor {
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+
+      .actor::after {
+        position: absolute;
+        right: 20%;
+        bottom: 4%;
+        left: 20%;
+        z-index: 0;
+        height: 9%;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.22);
+        filter: blur(7px);
+        content: "";
+      }
+
+      canvas {
+        position: relative;
+        z-index: 1;
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .reaction-up canvas,
+      .reaction-up .face-fx {
+        transform: translateY(-8px) rotate(1.8deg) scale(1.018);
+      }
+
+      .reaction-down canvas,
+      .reaction-down .face-fx {
+        transform: translateY(5px) rotate(-1.8deg) scale(0.985, 0.975);
+      }
+
+      .face-fx {
+        position: absolute;
+        z-index: 2;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .fx-eye,
+      .fx-mouth {
+        position: absolute;
+        display: block;
+        transform: translate(-50%, -50%);
+      }
+
+      .fx-eye {
+        width: 7.14%;
+        height: 4.29%;
+        border: 1px solid #4a372d;
+        border-radius: 54% 54% 48% 48%;
+        background: #eee7d8;
+        box-shadow: inset 0 -2px 0 rgba(77, 55, 45, 0.2);
+      }
+
+      .fx-eye::after {
+        position: absolute;
+        top: 50%;
+        left: 58%;
+        width: 24%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: #30241e;
+        content: "";
+        transform: translate(-50%, -50%);
+      }
+
+      .fx-mouth {
+        aspect-ratio: 2.45;
+        overflow: hidden;
+        border: 2px solid #866c8d;
+        border-radius: 50%;
+        background: #26171c;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        transform: translate(-50%, -50%) scaleY(0.48);
+      }
+
+      .fx-mouth::after {
+        position: absolute;
+        right: 20%;
+        bottom: -8%;
+        width: 48%;
+        height: 38%;
+        border-radius: 50%;
+        background: #b56e78;
+        content: "";
+      }
+
+      .scale-100 {
+        width: 238px;
+        height: 238px;
+      }
+
+      .scale-65 {
+        width: 155px;
+        height: 155px;
+      }
+
+      .scale-50 {
+        width: 119px;
+        height: 119px;
+      }
+
+      figcaption {
+        display: grid;
+        justify-items: center;
+        gap: 3px;
+        color: #f4ecdf;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .light figcaption {
+        color: #2f2922;
+      }
+
+      figcaption small {
+        color: #94897b;
+        font-size: 9px;
+        font-weight: 500;
+      }
+
+      .light figcaption small {
+        color: #6d6256;
+      }
+
+      .caption {
+        max-width: 190px;
+        overflow: hidden;
+        padding: 7px 9px;
+        border-radius: 9px;
+        background: #eee7da;
+        color: #2e2821;
+        font-size: 10px;
+        font-weight: 720;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .light .caption {
+        background: #29251f;
+        color: #f4ecdf;
+      }
+
+      footer {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #211e19;
+        color: #c8bcab;
+        font-size: 12px;
+      }
+
+      footer strong {
+        color: #d7a630;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1 id="title">专属牛造型</h1>
+        <p>同一张生产资产，经现有 prepareCowFrame 去背景后，在牛群三档密度下的真实轮廓。</p>
+      </div>
+      <div class="facts" aria-label="资产事实">
+        <span>PNG · 1024×1024</span>
+        <span id="faceFact">面部锚点</span>
+        <span>无内嵌文字</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="dark" aria-labelledby="darkTitle">
+        <div class="section-head">
+          <h2 id="darkTitle">深色桌面</h2>
+          <span>默认环境 · 检查边缘与道具</span>
+        </div>
+        <div class="sizes" data-surface="dark"></div>
+      </section>
+
+      <section class="light" aria-labelledby="lightTitle">
+        <div class="section-head">
+          <h2 id="lightTitle">浅色桌面</h2>
+          <span>检查毛发轮廓与低对比部件</span>
+        </div>
+        <div class="sizes" data-surface="light"></div>
+      </section>
+    </main>
+
+    <footer>
+      <strong>职责台词</strong>
+      <span id="copy">—</span>
+    </footer>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const asset = params.get("asset") || "../../assets/niulai-memo-v1.png";
+      const title = params.get("title") || "牛记牛";
+      const copy = params.get("copy") || "你记，我惦记：牛记";
+      const face = params.get("face") || "39,21;50,21;42,31,15";
+      const reactions = params.get("reactions") === "1";
+      const [leftEye, rightEye, mouth] = face.split(";").map((part) => part.split(",").map(Number));
+      const scales = [
+        { label: "100%", className: "scale-100", note: "1–4 头" },
+        { label: "65%", className: "scale-65", note: "9–16 头" },
+        { label: "50%", className: "scale-50", note: "17–34 头" },
+      ];
+
+      document.title = `${title} · 牛群造型验收`;
+      document.getElementById("title").textContent = title;
+      document.getElementById("copy").textContent = copy;
+      document.getElementById("faceFact").textContent = `face ${face.replaceAll(";", " / ")}`;
+      if (reactions) {
+        document.getElementById("darkTitle").textContent = "上涨动作峰值";
+        document.getElementById("lightTitle").textContent = "下跌动作峰值";
+        document.querySelector(".dark .section-head span").textContent = "上拱 8px · 右倾 1.8°";
+        document.querySelector(".light .section-head span").textContent = "下沉 5px · 左倾 1.8°";
+      }
+
+      function prepareFrame(image) {
+        const prepared = document.createElement("canvas");
+        prepared.width = 420;
+        prepared.height = 420;
+        const context = prepared.getContext("2d", { willReadFrequently: true });
+        context.drawImage(image, 0, 0, 420, 420);
+        const imageData = context.getImageData(0, 0, 420, 420);
+        const pixels = imageData.data;
+        for (let index = 0; index < pixels.length; index += 4) {
+          const red = pixels[index];
+          const green = pixels[index + 1];
+          const blue = pixels[index + 2];
+          const magenta = Math.min(red, blue) - green;
+          if (red > 145 && blue > 145 && magenta > 52) {
+            const removal = Math.min(1, Math.max(0, (magenta - 52) / 54));
+            pixels[index + 3] = Math.round(pixels[index + 3] * (1 - removal));
+            if (removal < 1) {
+              const clean = Math.max(green, Math.min(red, blue) * 0.56);
+              pixels[index] = Math.round(red * (1 - removal) + clean * removal);
+              pixels[index + 2] = Math.round(blue * (1 - removal) + clean * removal);
+            }
+          }
+        }
+        context.putImageData(imageData, 0, 0);
+        return prepared;
+      }
+
+      function addFaceFx(actor, surface) {
+        const overlay = document.createElement("div");
+        overlay.className = "face-fx";
+        if (surface === "light") {
+          [leftEye, rightEye].forEach(([x, y]) => {
+            const eye = document.createElement("i");
+            eye.className = "fx-eye";
+            eye.style.left = `${x}%`;
+            eye.style.top = `${y}%`;
+            overlay.append(eye);
+          });
+        } else {
+          const [x, y, width] = mouth;
+          const mouthFx = document.createElement("i");
+          mouthFx.className = "fx-mouth";
+          mouthFx.style.left = `${x}%`;
+          mouthFx.style.top = `${y}%`;
+          mouthFx.style.width = `${width}%`;
+          overlay.append(mouthFx);
+        }
+        actor.append(overlay);
+      }
+
+      function addFigure(container, prepared, scale) {
+        const figure = document.createElement("figure");
+        const actor = document.createElement("div");
+        actor.className = `actor ${scale.className}`;
+        if (reactions && scale.label === "100%") {
+          actor.classList.add(container.dataset.surface === "dark" ? "reaction-up" : "reaction-down");
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = 420;
+        canvas.height = 420;
+        canvas.getContext("2d").drawImage(prepared, 0, 0);
+        actor.append(canvas);
+        if (scale.label === "100%") addFaceFx(actor, container.dataset.surface);
+        const figcaption = document.createElement("figcaption");
+        figcaption.innerHTML = `${scale.label}<small>${scale.note}</small>`;
+        if (scale.label === "100%") {
+          const roleCopy = document.createElement("span");
+          roleCopy.className = "caption";
+          roleCopy.textContent = copy;
+          figcaption.append(roleCopy);
+        }
+        figure.append(actor, figcaption);
+        container.append(figure);
+      }
+
+      const image = new Image();
+      image.addEventListener("load", () => {
+        const prepared = prepareFrame(image);
+        document.querySelectorAll(".sizes").forEach((container) => {
+          scales.forEach((scale) => addFigure(container, prepared, scale));
+        });
+        document.documentElement.dataset.ready = "true";
+      });
+      image.addEventListener("error", () => {
+        document.body.textContent = `无法加载资产：${asset}`;
+      });
+      image.src = asset;
+    </script>
+  </body>
+</html>

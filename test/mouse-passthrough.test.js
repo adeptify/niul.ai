@@ -21,6 +21,22 @@ test("keeps visible surfaces and active pointer gestures interactive", () => {
     shouldIgnoreMouse({ pointerActive: true, overInteractiveSurface: false }),
     false
   );
+  assert.equal(
+    shouldIgnoreMouse({
+      pointerActive: false,
+      overInteractiveSurface: false,
+      passthroughReady: false,
+    }),
+    false
+  );
+});
+
+test("main process starts interactive and polls the cursor before enabling click-through", () => {
+  const main = fs.readFileSync(path.join(__dirname, "..", "electron/main.js"), "utf8");
+  assert.match(main, /let ignoreMouseRequested = false/);
+  assert.match(main, /setInterval\(\(\) => applyIgnoreMouse\(ignoreMouseRequested\), 16\)/);
+  assert.match(main, /pointInInteractiveRegions\([\s\S]*interactiveRegions,[\s\S]*18/);
+  assert.match(main, /NIULAI_HERD_PREVIEW/);
 });
 
 test("classic renderer scripts do not collide in the global scope", () => {
