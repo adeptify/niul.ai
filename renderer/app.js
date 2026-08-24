@@ -125,6 +125,8 @@ const MOOD_COPY = {
 const { createPreviewApi, PREVIEW_CONFIG, PREVIEW_SNAPSHOT } = window.niulaiPreviewApi;
 const api = window.niulai || createPreviewApi();
 const herdPreviewParams = new URLSearchParams(window.location.search);
+let menuBarShellMode = herdPreviewParams.get("shell") === "menu-bar";
+document.documentElement.dataset.shellMode = menuBarShellMode ? "menu-bar" : "desktop";
 const herdPreviewActive =
   herdPreviewParams.get("herdPreview") === "1" && Boolean(window.niulaiHerdPreview);
 const herdModeForced =
@@ -158,6 +160,8 @@ localStorage.setItem("niulai.statusFilterVersion", STATUS_FILTER_VERSION);
 let config;
 let latestRows = [];
 let latestSnapshot = null;
+let pendingMenuBarFocusId = "";
+let pendingMenuBarFocusExpiresAt = 0;
 let activeBubbleOverlay = null;
 let overlayReturnFocus = null;
 let lastListRenderKey = "";
@@ -371,11 +375,22 @@ function setPetExpression(expression = "base") {
 function syncRollControl() {
   const button = document.getElementById("rollCow");
   if (!button) return;
-  const available = activePetProfile().includesCow;
+  const available = !menuBarShellMode && activePetProfile().includesCow;
   button.disabled = !available;
   button.setAttribute("aria-disabled", String(!available));
-  button.setAttribute("aria-label", available ? "随机换一只牛" : "马模式暂无其他造型");
-  button.title = available ? "Roll 一只牛" : "马模式暂无其他造型";
+  button.setAttribute(
+    "aria-label",
+    available
+      ? "随机换一只牛"
+      : menuBarShellMode
+        ? "回到桌面后可换牛"
+        : "马模式暂无其他造型"
+  );
+  button.title = available
+    ? "Roll 一只牛"
+    : menuBarShellMode
+      ? "回到桌面后可换牛"
+      : "马模式暂无其他造型";
 }
 
 async function applyPetMode(nextMode) {
@@ -425,13 +440,19 @@ async function setCow(nextMood, force = false) {
 }
 
 async function rollCow() {
-  if (!petVisualsVisible || !activePetProfile().includesCow) return;
+  if (menuBarShellMode || !activePetProfile().includesCow) return;
   const candidates = COW_SKINS.filter(
     (skin) =>
       skin.id !== currentSkinId &&
       (petMode !== "both" || skin.bothCompatible !== false)
   );
   const next = candidates[Math.floor(Math.random() * candidates.length)] || COW_SKINS[0];
+  if (!petVisualsVisible) {
+    currentSkinId = next.id;
+    localStorage.setItem("niulai.cowSkin", currentSkinId);
+    showToast(`Roll 到：${next.name}，放回桌面就能看到`);
+    return;
+  }
   const button = document.getElementById("rollCow");
   const stage = document.getElementById("cowStage");
   button.classList.remove("is-rolling");
@@ -1187,6 +1208,49 @@ function renderSessionRows(snapshot) {
       }
     });
   }
+  applyPendingMenuBarFocus();
+}
+
+function applyPendingMenuBarFocus() {
+  if (!pendingMenuBarFocusId) return false;
+  if (Date.now() > pendingMenuBarFocusExpiresAt) {
+    pendingMenuBarFocusId = "";
+    pendingMenuBarFocusExpiresAt = 0;
+    return false;
+  }
+  const row = Array.from(document.querySelectorAll(".session-row")).find(
+    (element) => String(element.dataset.id) === pendingMenuBarFocusId
+  );
+  if (!row) return false;
+  pendingMenuBarFocusId = "";
+  pendingMenuBarFocusExpiresAt = 0;
+  document
+    .querySelector(".session-row.is-menu-bar-highlighted")
+    ?.classList.remove("is-menu-bar-highlighted");
+  row.classList.add("is-menu-bar-highlighted");
+  row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  row.focus({ preventScroll: true });
+  window.setTimeout(() => row.classList.remove("is-menu-bar-highlighted"), 4200);
+  return true;
+}
+
+function focusMenuBarSession(id) {
+  pendingMenuBarFocusId = String(id || "");
+  pendingMenuBarFocusExpiresAt = Date.now() + 10_000;
+  if (!pendingMenuBarFocusId) return;
+  setActiveBubbleOverlay(null);
+  setPetMenuOpen(false);
+  setBubbleCollapsed(false, { silent: true });
+  activeStatusFilter = "waiting";
+  activeRuntimeFilter = "all";
+  localStorage.setItem("niulai.statusFilter", activeStatusFilter);
+  localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
+  if (latestSnapshot) {
+    renderRuntimeFilters(latestSnapshot.rows);
+    renderStatusFilters(latestSnapshot.rows);
+    renderSummary(latestSnapshot);
+    renderSessionRows(latestSnapshot);
+  }
 }
 
 function enabledRuntimeSummary() {
@@ -1475,11 +1539,14 @@ async function setHerdModeEnabled(enabled) {
 }
 
 function shouldShowPetVisuals(nextConfig = config) {
+  if (menuBarShellMode) return false;
   return herdPreviewActive || herdModeForced || nextConfig?.showPetVisuals !== false;
 }
 
 async function setPetVisualsVisible(visible) {
-  const next = herdPreviewActive || herdModeForced || Boolean(visible);
+  const next = menuBarShellMode
+    ? false
+    : herdPreviewActive || herdModeForced || Boolean(visible);
   const pet = document.getElementById("pet");
   const stage = document.getElementById("cowStage");
   const roll = document.getElementById("rollCow");
@@ -1510,7 +1577,7 @@ async function setPetVisualsVisible(visible) {
       "is-moo-marathon"
     );
     pet.classList.remove("is-cow-upper", "is-observing-session", "is-wait-attention");
-    roll.hidden = true;
+    roll.hidden = !menuBarShellMode;
     document.getElementById("cowCaption").classList.remove(
       "is-visible",
       "is-attention",
@@ -1541,6 +1608,31 @@ async function setPetVisualsVisible(visible) {
     scheduleAmbientMotion();
     syncRollControl();
   }
+  requestAnimationFrame(syncInteractiveRegions);
+  syncMousePassthrough();
+}
+
+function syncMenuBarModeAction() {
+  const action = document.querySelector("#menuHidePet span");
+  if (!action) return;
+  action.replaceChildren(
+    menuBarShellMode ? "放回桌面" : "收进菜单栏",
+    Object.assign(document.createElement("small"), {
+      textContent: menuBarShellMode ? "恢复桌宠和原来位置" : "点顶部小牛头查看",
+    })
+  );
+}
+
+async function setMenuBarShell(mode) {
+  const next = mode === true || mode === "menu-bar";
+  menuBarShellMode = next;
+  document.documentElement.dataset.shellMode = next ? "menu-bar" : "desktop";
+  syncMenuBarModeAction();
+  setBubbleCollapsed(
+    next ? false : localStorage.getItem("niulai.bubbleCollapsed") === "true",
+    { silent: true, persist: false }
+  );
+  await setPetVisualsVisible(shouldShowPetVisuals(config));
   requestAnimationFrame(syncInteractiveRegions);
   syncMousePassthrough();
 }
@@ -1635,6 +1727,9 @@ async function openSession(id, element) {
     const opened = await api.focusSession(row);
     if (!opened) throw new Error("no target");
     showToast(`已切换到 ${row.label}`);
+    if (menuBarShellMode && typeof api.hideMenuBarPanel === "function") {
+      await api.hideMenuBarPanel();
+    }
   } catch {
     showToast(`没找到 ${row.label} App，没有打开项目目录`);
   } finally {
@@ -1950,7 +2045,9 @@ function setBubbleCollapsed(collapsed, options = {}) {
   const toggle = document.getElementById("toggleBubble");
   bubble.classList.toggle("is-collapsed", collapsed);
   toggle.setAttribute("aria-expanded", String(!collapsed));
-  localStorage.setItem("niulai.bubbleCollapsed", String(collapsed));
+  if (options.persist !== false) {
+    localStorage.setItem("niulai.bubbleCollapsed", String(collapsed));
+  }
   syncMenuBubbleAction(collapsed);
   if (collapsed) stopCowPointing();
   if (!options.silent) {
@@ -2752,9 +2849,14 @@ function bindTopControls() {
     event.stopPropagation();
     setPetMenuOpen(false);
     setActiveBubbleOverlay(null);
-    showToast("已隐藏，按 ⌘⇧U 唤回");
+    if (menuBarShellMode) {
+      if (typeof api.showMainWindow === "function") await api.showMainWindow();
+      return;
+    }
+    showToast("已收进菜单栏，点顶部小牛头查看");
     await new Promise((resolve) => window.setTimeout(resolve, 180));
-    await api.hideApp();
+    if (typeof api.enterMenuBarMode === "function") await api.enterMenuBarMode();
+    else await api.hideApp();
   });
   document.getElementById("menuToggleTheme").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -2812,9 +2914,14 @@ function bindTopControls() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    setPetMenuOpen(false);
-    if (activeBubbleOverlay === "settings") closeSettings();
-    else setActiveBubbleOverlay(null);
+    const menuWasOpen = !document.getElementById("petMenu").hidden;
+    const overlayWasOpen = Boolean(activeBubbleOverlay);
+    if (menuWasOpen) setPetMenuOpen(false);
+    else if (activeBubbleOverlay === "settings") closeSettings();
+    else if (overlayWasOpen) setActiveBubbleOverlay(null);
+    else if (menuBarShellMode && typeof api.hideMenuBarPanel === "function") {
+      api.hideMenuBarPanel();
+    }
   });
 }
 
@@ -2824,12 +2931,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   applyAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY) || "dark", { persist: false });
   setActiveSettingsTab("appearance");
   const collapsed = localStorage.getItem("niulai.bubbleCollapsed") === "true";
-  setBubbleCollapsed(collapsed, { silent: true });
+  setBubbleCollapsed(menuBarShellMode ? false : collapsed, {
+    silent: true,
+    persist: !menuBarShellMode,
+  });
   syncChatterMenu();
   if (typeof api.setChatterEnabled === "function") api.setChatterEnabled(chatterEnabled);
   bindMemo();
   bindSettings();
   bindTopControls();
+  syncMenuBarModeAction();
+  if (typeof api.onShellMode === "function") {
+    api.onShellMode((mode) => setMenuBarShell(mode));
+  }
+  if (typeof api.onMenuBarFocus === "function") {
+    api.onMenuBarFocus((id) => focusMenuBarSession(id));
+  }
+  if (typeof api.onOpenMainSurface === "function") {
+    api.onOpenMainSurface((surface) => openMainSurface(surface));
+  }
   armMousePassthrough();
   document.getElementById("toggleBubble").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -2859,3 +2979,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   window.setTimeout(() => tickMarket({ force: true }), 360);
   if (typeof api.onRequestScan === "function") api.onRequestScan(tick);
 });
+
+function openMainSurface(surface) {
+  if (surface === "memo") {
+    openMemoPanel();
+    return;
+  }
+  if (surface === "settings") {
+    if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+      setBubbleCollapsed(false, { silent: true });
+    }
+    setActiveBubbleOverlay("settings");
+    setActiveSettingsTab("appearance");
+    window.requestAnimationFrame(() => document.querySelector(".settings-nav button")?.focus());
+  }
+}

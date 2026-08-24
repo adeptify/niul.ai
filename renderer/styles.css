@@ -4031,3 +4031,32 @@ textarea::placeholder {
 #runtimeFilters[hidden] {
   display: none !important;
 }
+
+html[data-shell-mode="menu-bar"] #pet,
+html[data-shell-mode="menu-bar"] #pet[data-pet-visuals="hidden"] {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  justify-content: flex-start;
+  padding: 8px;
+}
+
+html[data-shell-mode="menu-bar"] .bubble {
+  width: min(448px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  transform-origin: 50% 0;
+}
+
+html[data-shell-mode="menu-bar"] .bubble-head {
+  -webkit-app-region: no-drag;
+}
+
+html[data-shell-mode="menu-bar"] .bubble-tail {
+  display: none !important;
+}
+
+.session-row.is-menu-bar-highlighted {
+  outline: 2px solid var(--tag-bright);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tag-bright) 18%, transparent);
+}

@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld("niulai", {
   saveConfig: (next) => ipcRenderer.invoke("save-config", next),
   chooseDirectory: () => ipcRenderer.invoke("choose-directory"),
   hideApp: () => ipcRenderer.invoke("hide-app"),
+  enterMenuBarMode: () => ipcRenderer.invoke("enter-menu-bar-mode"),
+  hideMenuBarPanel: () => ipcRenderer.invoke("hide-menu-bar-panel"),
+  showMainWindow: (surface) => ipcRenderer.invoke("show-main-window", surface),
   quitApp: () => ipcRenderer.invoke("quit-app"),
   listMemos: () => ipcRenderer.invoke("list-memos"),
   saveMemo: (memo) => ipcRenderer.invoke("save-memo", memo),
@@ -31,5 +34,20 @@ contextBridge.exposeInMainWorld("niulai", {
     const handler = (_event, memo) => callback(memo);
     ipcRenderer.on("memo-due", handler);
     return () => ipcRenderer.removeListener("memo-due", handler);
+  },
+  onShellMode: (callback) => {
+    const handler = (_event, mode) => callback(mode);
+    ipcRenderer.on("set-shell-mode", handler);
+    return () => ipcRenderer.removeListener("set-shell-mode", handler);
+  },
+  onMenuBarFocus: (callback) => {
+    const handler = (_event, id) => callback(id);
+    ipcRenderer.on("menu-bar-focus", handler);
+    return () => ipcRenderer.removeListener("menu-bar-focus", handler);
+  },
+  onOpenMainSurface: (callback) => {
+    const handler = (_event, surface) => callback(surface);
+    ipcRenderer.on("open-main-surface", handler);
+    return () => ipcRenderer.removeListener("open-main-surface", handler);
   },
 });

@@ -19,7 +19,8 @@ test("upgrades the legacy scan interval without resetting user preferences", () 
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 9);
+  assert.equal(config.configVersion, 10);
+  assert.equal(config.menuBarMode, false);
   assert.equal(config.petMode, "cow");
   assert.equal(config.herdMode, false);
   assert.equal(config.showPetVisuals, true);
@@ -68,7 +69,8 @@ test("preserves an enabled herd while upgrading without changing the saved pet m
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 9);
+  assert.equal(config.configVersion, 10);
+  assert.equal(config.menuBarMode, false);
   assert.equal(config.herdMode, true);
   assert.equal(config.petMode, "both");
   assert.equal(config.showPetVisuals, true);
@@ -88,7 +90,8 @@ test("preserves an explicit bubble-only preference", () => {
   );
 
   const config = loadConfig(userDataDir);
-  assert.equal(config.configVersion, 9);
+  assert.equal(config.configVersion, 10);
+  assert.equal(config.menuBarMode, false);
   assert.equal(config.showPetVisuals, false);
   assert.equal(config.herdMode, true);
   assert.equal(config.petMode, "horse");

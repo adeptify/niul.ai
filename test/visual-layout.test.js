@@ -9,6 +9,8 @@ const baseCss = fs.readFileSync(path.join(root, "renderer/styles.css"), "utf8");
 const herdCss = fs.readFileSync(path.join(root, "renderer/herd.css"), "utf8");
 const css = `${baseCss}\n${herdCss}`;
 const js = fs.readFileSync(path.join(root, "renderer/app.js"), "utf8");
+const mainJs = fs.readFileSync(path.join(root, "electron/main.js"), "utf8");
+const preloadJs = fs.readFileSync(path.join(root, "electron/preload.js"), "utf8");
 const sessionViewJs = fs.readFileSync(path.join(root, "renderer/session-view.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "renderer/moo.js"), "utf8");
 
@@ -167,6 +169,63 @@ test("power menu keeps controls and adds appearance before quit", () => {
   for (let i = 1; i < positions.length; i += 1) {
     assert.ok(positions[i] > positions[i - 1], `${order[i]} must follow ${order[i - 1]}`);
   }
+});
+
+test("power menu sends the full pet into the menu bar", () => {
+  const action = extract(html, 'id="menuHidePet"', "</button>");
+  assert.match(action, /收进菜单栏/);
+  assert.match(action, /点顶部小牛头查看/);
+  assert.match(js, /api\.enterMenuBarMode\(\)/);
+});
+
+test("menu bar mode reuses the only BrowserWindow and the full renderer", () => {
+  assert.equal((mainJs.match(/new BrowserWindow\s*\(/g) || []).length, 1);
+  assert.match(mainJs, /renderer["'], ["']index\.html/);
+  assert.match(mainJs, /set-shell-mode/);
+  assert.match(preloadJs, /onShellMode/);
+  for (const filename of ["menu-bar.html", "menu-bar.css", "menu-bar.js"]) {
+    assert.equal(fs.existsSync(path.join(root, "renderer", filename)), false);
+  }
+});
+
+test("menu bar uses non-empty-compatible transparent PNG tray assets", () => {
+  for (const filename of ["tray-template.png", "tray-attention-template.png"]) {
+    const image = fs.readFileSync(path.join(root, "assets", filename));
+    assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(image.readUInt32BE(16), 36);
+    assert.equal(image.readUInt32BE(20), 36);
+    assert.equal(image[25], 6, `${filename} must use RGBA color type`);
+    assert.match(mainJs, new RegExp(filename.replace(".", "\\.")));
+  }
+  assert.doesNotMatch(mainJs, /iconFor\(["']tray-(?:attention-)?template\.svg["']\)/);
+});
+
+test("menu bar shell suspends pet visuals while keeping the shared bubble", () => {
+  assert.match(js, /if \(menuBarShellMode\) return false/);
+  assert.match(js, /setPetVisualsVisible\(shouldShowPetVisuals\(config\)\)/);
+  assert.equal(cssProperty('html[data-shell-mode="menu-bar"] #pet', "justify-content"), "flex-start");
+  assert.equal(
+    cssProperty('html[data-shell-mode="menu-bar"] .bubble-head', "-webkit-app-region"),
+    "no-drag"
+  );
+});
+
+test("menu bar shell disables Roll until the visible cow returns to desktop", () => {
+  const sync = extract(js, "function syncRollControl", "async function applyPetMode");
+  const roll = extract(js, "async function rollCow", "const MARKET_INDEX_ORDER");
+  assert.match(sync, /!menuBarShellMode && activePetProfile\(\)\.includesCow/);
+  assert.match(sync, /button\.disabled = !available/);
+  assert.match(sync, /回到桌面后可换牛/);
+  assert.match(roll, /if \(menuBarShellMode \|\| !activePetProfile\(\)\.includesCow\) return/);
+  assert.match(cssRule(".roll-button:disabled"), /cursor\s*:\s*not-allowed/);
+});
+
+test("normal menu bar mode guards native blur races and stale notification focus", () => {
+  assert.match(mainJs, /Date\.now\(\) - menuBarBlurredAt > 250/);
+  assert.match(mainJs, /!nativeDialogOpen/);
+  assert.match(mainJs, /nativeDialogOpen = true/);
+  assert.match(js, /pendingMenuBarFocusExpiresAt = Date\.now\(\) \+ 10_000/);
+  assert.match(js, /Date\.now\(\) > pendingMenuBarFocusExpiresAt/);
 });
 
 test("quiet status bar exposes exactly four semantic filters", () => {

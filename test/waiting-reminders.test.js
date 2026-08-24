@@ -96,3 +96,15 @@ test("visible reminder metadata never mutates the cached snapshot", () => {
   assert.equal(response.waitingReminder.id, "session-a");
   assert.equal(withWaitingReminder(cached, null), cached);
 });
+
+test("an immediate notification can suppress the same waiting row for one claim", () => {
+  const engine = createWaitingReminderEngine();
+  const startedAt = 1_000;
+  engine.observe([waiting("session-a", "allow", startedAt)], startedAt);
+
+  assert.equal(
+    engine.claimDue(startedAt + 5 * 60 * 1000, ["session-a"]),
+    null
+  );
+  assert.equal(engine.claimDue(startedAt + 5 * 60 * 1000 + 1).id, "session-a");
+});

@@ -13,6 +13,9 @@ test("normal launches ignore herd QA overrides", () => {
     herdPreview: false,
     herdMode: false,
     herdCount: "8",
+    menuBarPreview: false,
+    menuBarInteractionPreview: false,
+    notificationPreview: false,
   });
   assert.equal(rendererQuery(options), undefined);
 });
@@ -35,4 +38,31 @@ test("explicit QA runtime mode and invalid counts are normalized", () => {
   });
   assert.equal(options.herdCount, "8");
   assert.deepEqual(rendererQuery(options), { herdMode: "1" });
+});
+
+test("menu bar preview is available only behind the explicit QA gate", () => {
+  assert.equal(readLaunchOptions({ NIULAI_MENU_BAR_PREVIEW: "1" }).menuBarPreview, false);
+  assert.equal(
+    readLaunchOptions({ NIULAI_QA: "1", NIULAI_MENU_BAR_PREVIEW: "1" }).menuBarPreview,
+    true
+  );
+  assert.equal(
+    readLaunchOptions({ NIULAI_NOTIFICATION_PREVIEW: "1" }).notificationPreview,
+    false
+  );
+  assert.equal(
+    readLaunchOptions({ NIULAI_QA: "1", NIULAI_NOTIFICATION_PREVIEW: "1" })
+      .notificationPreview,
+    true
+  );
+  assert.equal(
+    readLaunchOptions({ NIULAI_MENU_BAR_INTERACTION_PREVIEW: "1" })
+      .menuBarInteractionPreview,
+    false
+  );
+  assert.equal(
+    readLaunchOptions({ NIULAI_QA: "1", NIULAI_MENU_BAR_INTERACTION_PREVIEW: "1" })
+      .menuBarInteractionPreview,
+    true
+  );
 });

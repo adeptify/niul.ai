@@ -1,7 +1,8 @@
 {
-  "configVersion": 9,
+  "configVersion": 10,
   "pollMs": 5000,
   "globalShortcut": "CommandOrControl+Shift+U",
+  "menuBarMode": false,
   "petMode": "cow",
   "herdMode": false,
   "showPetVisuals": true,

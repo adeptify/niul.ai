@@ -70,9 +70,11 @@ function createWaitingReminderEngine({
     }
   }
 
-  function claimDue(at = now()) {
+  function claimDue(at = now(), excludedIds = []) {
+    const excluded = new Set((excludedIds || []).map(String));
     const due = [...watches.values()]
       .filter((watch) => {
+        if (excluded.has(watch.id)) return false;
         if (watch.reminded || watch.acknowledged || watch.pending) return false;
         const threshold = thresholds[watch.waitWhy] || thresholds.next;
         return at - watch.since >= threshold;

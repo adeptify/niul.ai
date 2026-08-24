@@ -5,6 +5,7 @@
 })(typeof globalThis === "object" ? globalThis : this, function createPreviewApiModule() {
   const PREVIEW_CONFIG = {
     pollMs: 5000,
+    menuBarMode: false,
     petMode: "cow",
     herdMode: false,
     showPetVisuals: true,
@@ -139,6 +140,9 @@
       },
       chooseDirectory: async () => "/Users/you/.my-agent/sessions",
       hideApp: async () => true,
+      enterMenuBarMode: async () => true,
+      hideMenuBarPanel: async () => true,
+      showMainWindow: async () => true,
       quitApp: async () => true,
       listMemos: async () => memos,
       saveMemo: async (memo) => {
@@ -161,6 +165,9 @@
       endWindowDrag: noop,
       onRequestScan: () => noop,
       onMemoDue: () => noop,
+      onShellMode: () => noop,
+      onMenuBarFocus: () => noop,
+      onOpenMainSurface: () => noop,
     };
   }
 

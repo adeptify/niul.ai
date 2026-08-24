@@ -38,6 +38,7 @@ function loadConfig(userDataDir) {
       "maxOfflineAgeMs",
       "maxSessions",
       "maxSessionsPerRuntime",
+      "menuBarMode",
       "petMode",
       "herdMode",
       "showPetVisuals",
