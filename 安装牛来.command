@@ -122,7 +122,7 @@ fi
 echo "🐮 正在安装牛来…"
 notice "正在准备牛来…"
 
-LOCAL_APPS=("$ROOT"/dist/mac*/牛来.app "$ROOT"/dist/mac/牛来.app)
+LOCAL_APPS=("$ROOT"/dist/mac*/牛来.app)
 if (( ${#LOCAL_APPS[@]} > 0 )); then
   install_app "${LOCAL_APPS[1]}"
   exit 0
@@ -167,7 +167,7 @@ if has_usable_node; then
   if ! npm run pack; then
     fail_install "打包失败。请看终端里的报错后再试。"
   fi
-  BUILT_APPS=("$ROOT"/dist/mac*/牛来.app "$ROOT"/dist/mac/牛来.app)
+  BUILT_APPS=("$ROOT"/dist/mac*/牛来.app)
   if (( ${#BUILT_APPS[@]} > 0 )); then
     install_app "${BUILT_APPS[1]}"
     exit 0
