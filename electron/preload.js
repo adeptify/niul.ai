@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("niulai", {
   scan: () => ipcRenderer.invoke("scan"),
   getMarketSnapshot: (options) => ipcRenderer.invoke("get-market-snapshot", options),
+  getQuotaSnapshot: (options) => ipcRenderer.invoke("get-quota-snapshot", options),
   getConfig: () => ipcRenderer.invoke("get-config"),
   saveConfig: (next) => ipcRenderer.invoke("save-config", next),
   chooseDirectory: () => ipcRenderer.invoke("choose-directory"),

@@ -131,7 +131,7 @@ test("herd styles load after the shared shell and stay in their own package", ()
   assert.match(herdCss, /#cowStage\[data-herd-mode="true"\]/);
 });
 
-test("memo, market, and settings share opaque overlays inside bubble", () => {
+test("memo, market, quota, and settings share opaque overlays inside bubble", () => {
   const bubbleStart = html.indexOf('<main class="bubble"');
   const bubbleEnd = html.indexOf("<!-- /bubble -->");
   assert.notEqual(bubbleStart, -1, "missing bubble main");
@@ -139,13 +139,16 @@ test("memo, market, and settings share opaque overlays inside bubble", () => {
   const bubble = html.slice(bubbleStart, bubbleEnd);
   assert.ok(bubble.includes('id="quickMemo"'));
   assert.ok(bubble.includes('id="marketBoard"'));
+  assert.ok(bubble.includes('id="quotaBoard"'));
   assert.ok(bubble.includes('id="settings"'));
   assert.doesNotMatch(bubble, /<dialog\b[^>]*id="settings"/);
   const memo = bubble.match(/id="quickMemo"[^>]*/);
   const market = bubble.match(/id="marketBoard"[^>]*/);
+  const quota = bubble.match(/id="quotaBoard"[^>]*/);
   const settings = bubble.match(/id="settings"[^>]*/);
   assert.ok(memo && memo[0].includes("bubble-overlay"));
   assert.ok(market && market[0].includes("bubble-overlay"));
+  assert.ok(quota && quota[0].includes("bubble-overlay"));
   assert.ok(settings && settings[0].includes("bubble-overlay"));
   const overlay = cssRule(".bubble-overlay");
   const bg = overlay.match(/background\s*:\s*([^;]+)/);
@@ -169,6 +172,14 @@ test("power menu keeps controls and adds appearance before quit", () => {
   for (let i = 1; i < positions.length; i += 1) {
     assert.ok(positions[i] > positions[i - 1], `${order[i]} must follow ${order[i - 1]}`);
   }
+});
+
+test("power menu remains visible and independently toggleable while bubble is collapsed", () => {
+  assert.match(css, /\.pet-menu\[hidden\]\s*\{[^}]*display\s*:\s*none/s);
+  assert.doesNotMatch(css, /\.bubble\.is-collapsed\s+\.pet-menu\s*(?:,|\{)/);
+  const toggle = extract(js, "function setPetMenuOpen", "function setBubbleCollapsed");
+  assert.match(toggle, /menu\.hidden\s*=\s*!open/);
+  assert.doesNotMatch(toggle, /setBubbleCollapsed\(/);
 });
 
 test("power menu sends the full pet into the menu bar", () => {
@@ -268,15 +279,30 @@ test("session cards use two information rows without a dark inner band", () => {
   assert.match(rule, /background\s*:\s*transparent/);
 });
 
-test("settings use three left-navigation panels inside the shared workspace", () => {
+test("settings use four left-navigation panels inside the shared workspace", () => {
   assert.doesNotMatch(html, /<dialog\b/);
   assert.ok(html.includes('class="settings-nav"'));
-  for (const tab of ["appearance", "scan", "market"]) {
+  for (const tab of ["appearance", "scan", "market", "quota"]) {
     assert.ok(html.includes(`data-settings-tab="${tab}"`));
     assert.ok(html.includes(`data-settings-panel="${tab}"`));
   }
   assert.doesNotMatch(js, /showModal\s*\(/);
   assert.match(js, /setActiveBubbleOverlay\(\s*["']settings["']\s*\)/);
+});
+
+test("token strip opens a readable opt-in quota workspace", () => {
+  const token = html.match(/<button[^>]*id="tokenStrip"[^>]*>/);
+  assert.ok(token, "token usage must be an interactive button");
+  assert.match(token[0], /aria-controls="quotaBoard"/);
+  assert.match(token[0], /aria-expanded="false"/);
+  assert.match(html, /id="quotaEnabled"/);
+  assert.match(html, /id="quotaClaudeEnabled"/);
+  assert.match(html, /id="quotaCodexEnabled"/);
+  assert.ok(html.indexOf('src="quota-view.js"') < html.indexOf('src="app.js"'));
+  assert.match(js, /function renderQuota\s*\(/);
+  assert.match(js, /function tickQuota\s*\(/);
+  assert.match(js, /setActiveBubbleOverlay\(\s*["']quota["']\s*\)/);
+  assert.match(cssRule(".quota-window-grid"), /repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
 test("appearance is restored and persisted", () => {
@@ -554,7 +580,9 @@ test("settings workspace keeps readable type and 108px left nav", () => {
 
 test("shared workspaces close through the same overlay state", () => {
   const overlay = extract(js, "function setActiveBubbleOverlay", "\nfunction ");
-  assert.match(overlay, /memo|market|settings/);
+  for (const name of ["memo", "market", "quota", "settings"]) {
+    assert.match(overlay, new RegExp(name));
+  }
   assert.match(js, /Escape|keydown/);
   assert.match(js, /setActiveBubbleOverlay\(\s*null\s*\)/);
 });
@@ -566,6 +594,7 @@ test("all visible workspaces stay inside the mouse interaction regions", () => {
   const arm = extract(js, "function armMousePassthrough", "\nfunction ");
 
   assert.match(surfaces, /marketBoard/);
+  assert.match(surfaces, /quotaBoard/);
   assert.match(surfaces, /settings/);
   for (const source of [hover, regions, arm]) assert.match(source, /INTERACTIVE_SURFACE_IDS/);
   assert.doesNotMatch(regions, /settings[^\n]*\.open|id\s*===\s*["']settings["'][^\n]*\.open/);
@@ -647,7 +676,7 @@ test("two-column market quotes do not restore a 4-column right border", () => {
   );
 });
 
-test("memo market and settings keep one stable workspace geometry", () => {
+test("memo market quota and settings keep one stable workspace geometry", () => {
   assert.equal(
     cssProperty(".bubble-overlay", "height"),
     "min(420px, calc(100vh - 96px))"
@@ -663,6 +692,10 @@ test("memo market and settings keep one stable workspace geometry", () => {
   );
   assert.equal(
     cssProperty(".market-board", "grid-template-rows"),
+    "auto minmax(0, 1fr)"
+  );
+  assert.equal(
+    cssProperty(".quota-board", "grid-template-rows"),
     "auto minmax(0, 1fr)"
   );
   assert.equal(cssProperty(".memo-list", "min-height"), "0");

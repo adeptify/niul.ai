@@ -99,6 +99,14 @@ Explicit local usage metadata is currently imported for:
 
 If a source is partial, the UI says so. If a runtime does not expose actual usage, Niul.ai leaves it out of the total.
 
+### Subscription quota windows
+
+The Token strip can also show the remaining Claude and Codex subscription windows. Open it to see the 5-hour and 7-day allowances, plus model-scoped Claude windows such as Fable when the upstream service returns them, with reset times for each window.
+
+Quota lookup is off by default. Enable it under **Settings → Quota**, where Claude and Codex can be toggled independently. Niul.ai reads the standalone Claude Code / Codex CLI login only in main-process memory and sends it solely to the corresponding Claude or OpenAI domain. It never stores, logs, refreshes, or rewrites those credentials. Claude Desktop does not share its login with other apps; Desktop-only users need to run `claude auth login` once in Terminal.
+
+These quota endpoints are not stable public APIs and may change upstream. When they fail, Niul.ai keeps the last valid snapshot and retries in the background; session monitoring and local token totals continue normally.
+
 ### Ambient by design
 
 This is not meant to become another observability console. The cow stays on top, can be collapsed to a small footprint, and uses restrained motion and short status lines to tell you when something changed.

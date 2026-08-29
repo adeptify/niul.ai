@@ -16,8 +16,13 @@ const { readLaunchOptions, rendererQuery } = require("./launch-options");
 const { focusSession } = require("./focus");
 const { createMemoStore } = require("./memos");
 const { EastmoneyIndexProvider } = require("./market/eastmoney-provider");
+const { FallbackIndexProvider } = require("./market/fallback-provider");
+const { readMarketCache, writeMarketCache } = require("./market/cache-store");
 const { MarketService } = require("./market/market-service");
 const { MarketReactionEngine } = require("./market/reactions");
+const { TencentIndexProvider } = require("./market/tencent-provider");
+const { ClaudeQuotaProvider, CodexQuotaProvider } = require("./quota/providers");
+const { QuotaService } = require("./quota/quota-service");
 const {
   createWaitingReminderEngine,
   withWaitingReminder,
@@ -39,6 +44,7 @@ let config;
 let memoStore;
 let marketService;
 let marketReactionEngine;
+let quotaService;
 let memoTimer;
 let mouseGuardTimer;
 let backgroundScanTimer;
@@ -422,8 +428,24 @@ app.whenReady().then(() => {
   const initialMenuBarMode = config.menuBarMode === true || menuBarPreviewActive;
   if (menuBarPreviewActive) config = { ...config, menuBarMode: true };
   memoStore = createMemoStore(path.join(app.getPath("userData"), "memos.json"));
-  marketService = new MarketService({ provider: new EastmoneyIndexProvider() });
+  const marketCacheFile = path.join(app.getPath("userData"), "market-cache.json");
+  marketService = new MarketService({
+    provider: new FallbackIndexProvider({
+      providers: [new TencentIndexProvider(), new EastmoneyIndexProvider()],
+    }),
+    initialCache: readMarketCache(marketCacheFile),
+    onCacheUpdate: (snapshot) => {
+      try {
+        writeMarketCache(marketCacheFile, snapshot);
+      } catch (error) {
+        console.warn("market cache unavailable", error);
+      }
+    },
+  });
   marketReactionEngine = new MarketReactionEngine();
+  quotaService = new QuotaService({
+    providers: [new ClaudeQuotaProvider(), new CodexQuotaProvider()],
+  });
   createWindow({
     suppressInitialShow: initialMenuBarMode,
     initialShell: initialMenuBarMode ? "menu-bar" : "desktop",
@@ -504,10 +526,22 @@ app.whenReady().then(() => {
       reaction: marketConfig.reactionsEnabled === false ? null : candidate,
     };
   });
+  ipcMain.handle("get-quota-snapshot", async (_event, options = {}) => {
+    const quotaConfig = config.quota || {};
+    const providerIds = Object.entries(quotaConfig.providers || {})
+      .filter(([, enabled]) => enabled !== false)
+      .map(([id]) => id);
+    return quotaService.getSnapshot({
+      enabled: quotaConfig.enabled === true,
+      providerIds,
+      force: Boolean(options.force),
+    });
+  });
   ipcMain.handle("get-config", () => config);
   ipcMain.handle("save-config", (_e, next) => {
     const previousMarket = JSON.stringify(config.market || {});
     config = saveConfig(app.getPath("userData"), next);
+    if (config.quota?.enabled !== true) quotaService.disable();
     if (previousMarket !== JSON.stringify(config.market || {})) {
       marketReactionEngine = new MarketReactionEngine();
     }

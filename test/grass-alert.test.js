@@ -51,3 +51,30 @@ test("grass alert fires once per rate-limit window across reloads", () => {
   const nextWindow = { ...rateLimit, resetsAt: rateLimit.resetsAt + 7 * 86400000 };
   assert.ok(reloaded.candidate(nextWindow, now + 3000));
 });
+
+test("grass alert selects the tightest provider window and names it", () => {
+  const now = 1_000_000;
+  const alert = grassAlert(
+    {
+      providers: [
+        {
+          id: "claude",
+          label: "Claude",
+          windows: [
+            { id: "weekly", label: "7 天", remainingPercent: 18, resetsAt: now + 3600_000 },
+          ],
+        },
+        {
+          id: "codex",
+          label: "Codex",
+          windows: [
+            { id: "five-hour", label: "5 小时", remainingPercent: 9, resetsAt: now + 3600_000 },
+          ],
+        },
+      ],
+    },
+    now
+  );
+  assert.match(alert.text, /Codex 5 小时额度快用完/);
+  assert.match(alert.key, /codex:five-hour/);
+});

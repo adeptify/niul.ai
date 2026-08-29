@@ -1,16 +1,43 @@
 (() => {
   const STORAGE_KEY = "niulai.grassAlertWindow";
 
+  function quotaWindows(input) {
+    if (Array.isArray(input?.providers)) {
+      return input.providers.flatMap((provider) =>
+        (provider.windows || []).map((window) => ({
+          ...window,
+          providerId: provider.id,
+          providerLabel: provider.label || provider.id,
+        }))
+      );
+    }
+    return input
+      ? [{ ...input, providerId: input.limitId || "codex", providerLabel: "Codex" }]
+      : [];
+  }
+
   function grassAlert(rateLimit, now = Date.now()) {
-    if (!rateLimit || !Number.isFinite(Number(rateLimit.remainingPercent))) return null;
-    const remaining = Number(rateLimit.remainingPercent);
-    const resetsAt = Number(rateLimit.resetsAt);
-    if (!Number.isFinite(resetsAt) || resetsAt <= now) return null;
-    const untilReset = resetsAt - now;
-    if (remaining > 20 && untilReset > 60 * 60 * 1000) return null;
+    const candidates = quotaWindows(rateLimit)
+      .filter((window) => {
+        const remaining = Number(window.remainingPercent);
+        const resetsAt = Number(window.resetsAt);
+        if (!Number.isFinite(remaining) || !Number.isFinite(resetsAt) || resetsAt <= now) {
+          return false;
+        }
+        return remaining <= 20 || resetsAt - now <= 60 * 60 * 1000;
+      })
+      .sort(
+        (a, b) =>
+          Number(a.remainingPercent) - Number(b.remainingPercent) ||
+          Number(a.resetsAt) - Number(b.resetsAt)
+      );
+    const urgent = candidates[0];
+    if (!urgent) return null;
+    const resetsAt = Number(urgent.resetsAt);
+    const windowLabel = urgent.label ? ` ${urgent.label}` : "";
     return {
-      key: `${rateLimit.limitId || "codex"}|${resetsAt}`,
-      text: "Codex 额度快用完了。",
+      key: `${urgent.providerId}:${urgent.id || "quota"}|${resetsAt}`,
+      text: `${urgent.providerLabel}${windowLabel}额度快用完了。`,
     };
   }
 

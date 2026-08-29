@@ -1,5 +1,5 @@
 {
-  "configVersion": 10,
+  "configVersion": 11,
   "pollMs": 5000,
   "globalShortcut": "CommandOrControl+Shift+U",
   "menuBarMode": false,
@@ -14,6 +14,13 @@
     "provider": "eastmoney",
     "reactionsEnabled": true,
     "thresholdPct": 0.1
+  },
+  "quota": {
+    "enabled": false,
+    "providers": {
+      "claude": true,
+      "codex": true
+    }
   },
   "workingWindowMs": 90000,
   "maxOfflineAgeMs": 259200000,

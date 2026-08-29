@@ -15,6 +15,7 @@
 - 主窗口隐藏后 `scheduleBackgroundScanning` 会继续扫描；Memo 和长时间等待已经使用系统 `Notification`。
 - 完整 Renderer 已包含 Session、牛记、大盘、设置、筛选、深浅色和异常状态，复制第二套菜单会产生功能漂移。
 - 完整气泡与桌宠目前共同布局在 `#pet` 中；菜单栏模式需要临时隐藏角色、取消可拖动标题栏并把同一个气泡固定在菜单栏牛头下方。
+- 2026-08-30 实机发现桌面气泡收起为顶部横条后，点击最右侧电源按钮虽然会把 `#petMenu.hidden` 设为 `false`，但 `.bubble.is-collapsed .pet-menu { display: none; }` 仍强制隐藏菜单，导致按钮有反馈而菜单不弹出。
 
 ## 保留、替换、忽略
 
@@ -142,6 +143,7 @@ snapshot
 13. `node --check`、定向测试、`npm test`、`npm run pack` 与真实 Electron 往返通过。
 14. 开发路径和打包后的 ASAR 路径中，Tray PNG 均能被 Electron `nativeImage` 读取为非空图。
 15. 菜单栏壳层的 Roll 按钮视觉和语义均为 disabled，点击或程序调用不会换肤/提示；返回桌面后按桌宠组合恢复。
+16. 桌面气泡收起为顶部横条时，电源菜单仍可作为浮层打开、操作和关闭；打开菜单不应擅自展开气泡。
 
 ## 验证命令
 
@@ -170,5 +172,6 @@ npm start
 - Impeccable 最终 verdict：界面、单窗口架构、功能一致性和原生关闭链路 READY；完成等级因 OS 通知未实际投递维持 NEEDS-FIX，需在签名/通知权限有效环境补一次投递与点击验收。
 - 后续实机纠正：安装版 `0.1.0` 未包含菜单栏功能；安装 `0.1.6` 后又确认 SVG 在 Electron 中为 `empty: true`，这解释了“Tray 占位存在但牛头不可见”。现已改用透明 RGBA PNG；开发路径、打包 ASAR 和最终安装版路径均由 Electron 验证为 `empty: false`、`36×36`，验收项 14 通过。最终安装版已在 `menuBarMode=true` 下启动驻留。
 - 顶部状态 Roll 修正：真实安装版菜单栏壳层的无障碍树显示 `按钮 (disabled) 回到桌面后可换牛`，桌宠仍不运行；事件处理和 `rollCow()` 均有禁用/短路保护，不再产生换肤或 Toast。验收项 15 通过。
+- 收起状态电源菜单修正：移除 `.bubble.is-collapsed` 对 `.pet-menu` 的强制隐藏，保留菜单自己的 `hidden` 开关；打开菜单不会展开气泡。定向布局测试 54/54、完整测试 231/231 通过，验收项 16 通过；本轮未重新打包或做真实 Electron 点击验收。
 
 最终证据：`node --check` 通过，`npm test` 193/193，`npm run pack` 通过；真实 Electron 验证菜单栏/桌面往返、Escape、外点、Session 成功跳转、原生目录选择器与重启驻留。

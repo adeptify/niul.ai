@@ -18,6 +18,10 @@
       reactionsEnabled: true,
       thresholdPct: 0.1,
     },
+    quota: {
+      enabled: true,
+      providers: { claude: true, codex: true },
+    },
     runtimes: {
       cursor: { enabled: true, label: "Cursor" },
       "claude-code": { enabled: true, label: "Claude Code" },
@@ -106,8 +110,8 @@
   };
 
   const PREVIEW_MARKET_SNAPSHOT = {
-    provider: "eastmoney",
-    providerLabel: "东方财富",
+    provider: "tencent",
+    providerLabel: "腾讯行情",
     fetchedAt: Date.now(),
     status: "fresh",
     stale: false,
@@ -126,6 +130,41 @@
     ],
   };
 
+  const PREVIEW_QUOTA_SNAPSHOT = {
+    status: "fresh",
+    fetchedAt: Date.now(),
+    nextPollMs: 300_000,
+    providers: [
+      {
+        id: "claude",
+        label: "Claude",
+        planType: "max",
+        status: "fresh",
+        observedAt: Date.now(),
+        errorCode: "",
+        error: "",
+        windows: [
+          { id: "five-hour", role: "five_hour", label: "5 小时", usedPercent: 12, remainingPercent: 88, resetsAt: Date.now() + 4 * 3600_000 },
+          { id: "seven-day", role: "seven_day", label: "7 天", usedPercent: 47, remainingPercent: 53, resetsAt: Date.now() + 4 * 86400_000 },
+          { id: "model-weekly-fable", role: "model_weekly", label: "Fable", usedPercent: 0, remainingPercent: 100, resetsAt: Date.now() + 4 * 86400_000 },
+        ],
+      },
+      {
+        id: "codex",
+        label: "Codex",
+        planType: "pro",
+        status: "fresh",
+        observedAt: Date.now(),
+        errorCode: "",
+        error: "",
+        windows: [
+          { id: "five-hour", role: "five_hour", label: "5 小时", usedPercent: 24, remainingPercent: 76, resetsAt: Date.now() + 2 * 3600_000 },
+          { id: "seven-day", role: "seven_day", label: "7 天", usedPercent: 17, remainingPercent: 83, resetsAt: Date.now() + 5 * 86400_000 },
+        ],
+      },
+    ],
+  };
+
   function createPreviewApi() {
     let config = structuredClone(PREVIEW_CONFIG);
     let memos = [];
@@ -133,6 +172,7 @@
     return {
       scan: async () => ({ ...PREVIEW_SNAPSHOT, scannedAt: Date.now() }),
       getMarketSnapshot: async () => ({ ...PREVIEW_MARKET_SNAPSHOT, fetchedAt: Date.now() }),
+      getQuotaSnapshot: async () => ({ ...PREVIEW_QUOTA_SNAPSHOT, fetchedAt: Date.now() }),
       getConfig: async () => config,
       saveConfig: async (next) => {
         config = next;
@@ -171,5 +211,11 @@
     };
   }
 
-  return { createPreviewApi, PREVIEW_CONFIG, PREVIEW_MARKET_SNAPSHOT, PREVIEW_SNAPSHOT };
+  return {
+    createPreviewApi,
+    PREVIEW_CONFIG,
+    PREVIEW_MARKET_SNAPSHOT,
+    PREVIEW_QUOTA_SNAPSHOT,
+    PREVIEW_SNAPSHOT,
+  };
 });

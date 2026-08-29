@@ -27,6 +27,14 @@ function loadConfig(userDataDir) {
     ...defaults,
     ...user,
     market: { ...(defaults.market || {}), ...(user.market || {}) },
+    quota: {
+      ...(defaults.quota || {}),
+      ...(user.quota || {}),
+      providers: {
+        ...(defaults.quota?.providers || {}),
+        ...(user.quota?.providers || {}),
+      },
+    },
     runtimes,
     custom: Array.isArray(user.custom) ? user.custom : defaults.custom || [],
     _path: userFile,
@@ -46,6 +54,7 @@ function loadConfig(userDataDir) {
       "bubbleScale",
       "soundEnabled",
       "market",
+      "quota",
     ]) {
       if (!(key in user) && key in defaults) merged[key] = defaults[key];
     }

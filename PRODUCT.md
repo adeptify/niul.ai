@@ -30,7 +30,8 @@ macOS desktop
 - macOS 优先，Electron 透明无边框窗口。
 - 四态：工作中、等你、闲置、不在线；有事件合同的 Runtime 必须事件优先，不能只靠统一 `mtime`。
 - 今日 Token 只读取本机明确 usage 元数据；不按 prompt 或回复字数估算。
-- 展开的气泡可通过可替换 `IndexProvider` 展示中、港、美 8 个主要指数；第一数据源为东方财富免 Key 行情。
+- 用户可主动开启 Claude 与 Codex 订阅额度查询，查看 5 小时、7 天和上游返回的独立模型窗口；凭据只在主进程内存中使用，不保存、不打印、不刷新，额度失败不得阻塞 Session 扫描。
+- 展开的气泡可通过可替换 `IndexProvider` 展示中、港、美 8 个主要指数；腾讯免 Key 行情为主源，东方财富单标的接口只补充缺失数据。
 - 行情日涨跌幅跨过设置门槛时可驱动一次临时动作和台词，但不能覆盖或打断 Agent 状态；默认最低门槛为 `0.1%`。
 - 行情请求失败、部分缺失或过期时保留可辨认的降级状态，且不得影响本机 Session 扫描。
 - Session 可按 Runtime 标签即时筛选；悬停行会驱动牛转身关注并播报状态。
@@ -61,6 +62,7 @@ macOS desktop
 
 - Runtime 扫描与状态判定：`electron/scan.js`
 - 本机 Token 统计：`electron/tokens.js`
+- 订阅额度 Provider、缓存与降级：`electron/quota/`
 - 本地 Memo 与提醒：`electron/memos.js`
 - macOS 跳转行为：`electron/focus.js`
 - 用户提供的电影截图与据此生成的角色参考资产：`assets/niulai-canonical-v4.png`

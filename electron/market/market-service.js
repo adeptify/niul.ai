@@ -16,6 +16,8 @@ class MarketService {
     staleAfterMs = 600_000,
     unchangedBeforeQuiet = 3,
     backoffMs = DEFAULT_BACKOFF_MS,
+    initialCache = null,
+    onCacheUpdate = null,
   }) {
     this.provider = assertProvider(provider);
     this.now = now;
@@ -25,10 +27,11 @@ class MarketService {
     this.staleAfterMs = staleAfterMs;
     this.unchangedBeforeQuiet = unchangedBeforeQuiet;
     this.backoffMs = backoffMs;
-    this.cache = null;
+    this.cache = initialCache;
+    this.onCacheUpdate = typeof onCacheUpdate === "function" ? onCacheUpdate : null;
     this.inFlight = null;
     this.nextFetchAt = 0;
-    this.lastSuccessAt = 0;
+    this.lastSuccessAt = Number(initialCache?.fetchedAt || 0);
     this.lastError = "";
     this.failureCount = 0;
     this.unchangedCount = 0;
@@ -129,6 +132,11 @@ class MarketService {
           ...retainedQuotes,
         ],
       };
+      try {
+        this.onCacheUpdate?.(this.cache);
+      } catch {
+        // Persistence is best-effort and must never turn a live quote into a failed refresh.
+      }
       const nextInterval =
         this.unchangedCount >= this.unchangedBeforeQuiet ? this.quietPollMs : this.pollMs;
       this.nextFetchAt = now + nextInterval;

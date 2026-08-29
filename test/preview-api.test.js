@@ -4,20 +4,23 @@ const {
   createPreviewApi,
   PREVIEW_CONFIG,
   PREVIEW_MARKET_SNAPSHOT,
+  PREVIEW_QUOTA_SNAPSHOT,
   PREVIEW_SNAPSHOT,
 } = require("../renderer/preview-api");
 
 test("preview data preserves the production IPC shapes", async () => {
   const api = createPreviewApi();
-  const [config, snapshot, market] = await Promise.all([
+  const [config, snapshot, market, quota] = await Promise.all([
     api.getConfig(),
     api.scan(),
     api.getMarketSnapshot(),
+    api.getQuotaSnapshot(),
   ]);
   assert.deepEqual(config, PREVIEW_CONFIG);
   assert.equal(snapshot.rows.length, PREVIEW_SNAPSHOT.rows.length);
   assert.equal(snapshot.counts.working, 2);
   assert.equal(market.quotes.length, PREVIEW_MARKET_SNAPSHOT.quotes.length);
+  assert.equal(quota.providers.length, PREVIEW_QUOTA_SNAPSHOT.providers.length);
 });
 
 test("preview memos and configuration are isolated per API instance", async () => {

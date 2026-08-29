@@ -125,14 +125,15 @@
               <span></span><span></span><span></span>
             </li>
           </ul>
-          <div class="token-strip" id="tokenStrip" title="只统计本机日志里有明确 usage 元数据的 Runtime">
+          <button class="token-strip" id="tokenStrip" type="button" aria-expanded="false" aria-controls="quotaBoard" title="查看今日 Token 与订阅额度">
             <span class="token-mark" aria-hidden="true">T</span>
             <span class="token-copy">
               <span>今日 Token</span>
               <strong id="todayTokens">—</strong>
             </span>
             <span class="token-sources" id="tokenSources">正在读取本机用量</span>
-          </div>
+            <svg class="token-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+          </button>
         </div>
 
         <section id="marketBoard" class="market-board bubble-overlay" hidden aria-labelledby="marketTitle">
@@ -141,13 +142,37 @@
               <span class="market-mark" aria-hidden="true">盘</span>
               <strong id="marketTitle">大盘</strong>
             </div>
-            <span class="market-meta" id="marketMeta">东方财富 · 正在看盘</span>
+            <span class="market-meta" id="marketMeta">实时行情 · 正在看盘</span>
             <button class="icon-button light" id="closeMarket" type="button" aria-label="关闭大盘">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
             </button>
           </header>
           <div class="market-grid is-loading" id="marketGrid" aria-label="主要市场指数">
             <span class="market-loading">正在读取中、港、美主要指数…</span>
+          </div>
+        </section>
+
+        <section id="quotaBoard" class="quota-board bubble-overlay" hidden aria-labelledby="quotaTitle">
+          <header class="quota-board-head opaque-panel-head">
+            <div>
+              <span class="quota-mark" aria-hidden="true">草</span>
+              <strong id="quotaTitle">订阅额度</strong>
+            </div>
+            <span class="quota-meta" id="quotaMeta">等牛去看一眼</span>
+            <div class="quota-head-actions">
+              <button class="icon-button light" id="refreshQuota" type="button" aria-label="刷新订阅额度" title="刷新额度">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7v5h-5"></path><path d="M18 12a6.5 6.5 0 1 0 .2 4.6"></path></svg>
+              </button>
+              <button class="icon-button light" id="closeQuota" type="button" aria-label="关闭订阅额度">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+              </button>
+            </div>
+          </header>
+          <div class="quota-content is-loading" id="quotaContent" aria-live="polite">
+            <div class="quota-empty-state">
+              <strong>正在读取订阅窗口</strong>
+              <span>Session 巡视不会等它。</span>
+            </div>
           </div>
         </section>
 
@@ -195,6 +220,7 @@
           <button type="button" data-settings-tab="appearance">外观与声音</button>
           <button type="button" data-settings-tab="scan">巡视范围</button>
           <button type="button" data-settings-tab="market">大盘</button>
+          <button type="button" data-settings-tab="quota">额度</button>
         </nav>
         <section class="settings-panel" data-settings-panel="appearance" aria-labelledby="scaleSettingsTitle">
           <label class="preference-toggle pet-visuals-toggle">
@@ -297,7 +323,7 @@
               <h3 id="marketSettingsTitle">大盘</h3>
               <p>直接展示中、港、美主要指数。</p>
             </div>
-            <span class="provider-label">东方财富</span>
+            <span class="provider-label">自动选择</span>
           </div>
           <label class="preference-toggle market-toggle">
             <span>
@@ -321,6 +347,35 @@
               <label><input type="radio" name="marketThreshold" value="1" /><span>安静<small>1%</small></span></label>
             </div>
           </fieldset>
+        </section>
+        <section class="settings-panel quota-settings" data-settings-panel="quota" aria-labelledby="quotaSettingsTitle">
+          <div class="section-heading">
+            <div>
+              <h3 id="quotaSettingsTitle">订阅额度</h3>
+              <p>看 Claude 与 Codex 的 5 小时、7 天和独立模型窗口。</p>
+            </div>
+            <span class="provider-label">本机登录</span>
+          </div>
+          <label class="preference-toggle quota-toggle">
+            <span>
+              <strong>查询订阅额度</strong>
+              <small>只有开启后，牛来才会读取本机登录凭据并请求额度。</small>
+            </span>
+            <input id="quotaEnabled" type="checkbox" />
+          </label>
+          <div class="quota-provider-settings" aria-label="额度供应商">
+            <label class="preference-toggle quota-provider-toggle">
+              <span><strong>Claude</strong><small>需独立 Claude Code 登录；Desktop 登录暂不共享。</small></span>
+              <input id="quotaClaudeEnabled" type="checkbox" checked />
+            </label>
+            <label class="preference-toggle quota-provider-toggle">
+              <span><strong>Codex</strong><small>5 小时与 7 天窗口。</small></span>
+              <input id="quotaCodexEnabled" type="checkbox" checked />
+            </label>
+          </div>
+          <p class="quota-privacy-note">
+            凭据只在主进程内存中使用，只发送给 Claude 或 OpenAI 对应域名，不保存、不打印。额度端点并非公开稳定 API；失效时只会显示暂不可用，不影响 Session 巡视。
+          </p>
         </section>
         <footer class="settings-footer">
           <p class="field-help" id="settingsError">修改会在保存并重扫后生效。</p>
@@ -367,6 +422,7 @@
 
     <script src="mouse-passthrough.js"></script>
     <script src="grass-alert.js"></script>
+    <script src="quota-view.js"></script>
     <script src="session-view.js"></script>
     <script src="preview-api.js"></script>
     <script src="pet-mode.js"></script>

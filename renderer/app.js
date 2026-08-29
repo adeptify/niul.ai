@@ -13,6 +13,13 @@ const {
   waitingCopy,
   waitWhyOf,
 } = window.niulaiSessionView;
+const {
+  currentWindows,
+  formatResetTime,
+  quotaSummary,
+  quotaTone,
+  quotaUpdatedText,
+} = window.niulQuotaView;
 
 const APPEARANCE_STORAGE_KEY = "niulai.appearance";
 
@@ -168,8 +175,10 @@ let lastListRenderKey = "";
 let draftCustom = [];
 let scanTimer;
 let marketTimer;
+let quotaTimer;
 let tickInFlight = false;
 let marketTickInFlight = false;
+let quotaTickInFlight = false;
 let captionTimer;
 let speakingTimer;
 let blinkTimer;
@@ -194,6 +203,7 @@ let hasInitialSnapshot = false;
 let chatterEnabled = localStorage.getItem("niulai.chatter") !== "false";
 const grassAlerts = createGrassAlertTracker(localStorage);
 let latestMarketSnapshot = null;
+let latestQuotaSnapshot = { status: "disabled", fetchedAt: null, providers: [] };
 let pendingMarketReaction = null;
 let priorityBusyUntil = 0;
 let herdPreviewController = null;
@@ -524,13 +534,15 @@ function applyAppearance(theme, { persist = true } = {}) {
 
 function setActiveBubbleOverlay(name) {
   const next =
-    name === "memo" || name === "market" || name === "settings" ? name : null;
+    name === "memo" || name === "market" || name === "quota" || name === "settings"
+      ? name
+      : null;
   const previous = activeBubbleOverlay;
   const focused = document.activeElement;
   if (
     next &&
     focused instanceof HTMLElement &&
-    (previous === null || focused.closest(".head-actions"))
+    (previous === null || focused.closest(".head-actions") || focused.id === "tokenStrip")
   ) {
     overlayReturnFocus = focused;
   }
@@ -540,6 +552,7 @@ function setActiveBubbleOverlay(name) {
   activeBubbleOverlay = next;
   document.getElementById("quickMemo").hidden = activeBubbleOverlay !== "memo";
   document.getElementById("marketBoard").hidden = activeBubbleOverlay !== "market";
+  document.getElementById("quotaBoard").hidden = activeBubbleOverlay !== "quota";
   document.getElementById("settings").hidden = activeBubbleOverlay !== "settings";
   for (const [buttonId, overlayName] of [
     ["memoButton", "memo"],
@@ -551,6 +564,10 @@ function setActiveBubbleOverlay(name) {
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-pressed", String(selected));
   }
+  document.getElementById("tokenStrip").setAttribute(
+    "aria-expanded",
+    String(activeBubbleOverlay === "quota")
+  );
   for (const id of ["summaryRail", "bubbleBody"]) {
     const covered = document.getElementById(id);
     const hiddenByWorkspace = Boolean(activeBubbleOverlay);
@@ -586,7 +603,7 @@ function renderMarket(snapshot) {
   latestMarketSnapshot = snapshot;
   board.classList.toggle("is-stale", snapshot?.status === "stale");
   board.classList.toggle("is-unavailable", snapshot?.status === "unavailable");
-  const provider = snapshot?.providerLabel || "东方财富";
+  const provider = snapshot?.providerLabel || "实时行情";
 
   if (!snapshot || snapshot.status === "unavailable") {
     meta.textContent = `${provider} · 暂时连不上`;
@@ -969,6 +986,107 @@ function closeMarketPanel() {
   setActiveBubbleOverlay(null);
 }
 
+function quotaProviderMarkup(provider, now = Date.now()) {
+  const windows = currentWindows(provider, now);
+  const providerState =
+    provider.status === "fresh"
+      ? "已更新"
+      : provider.status === "stale"
+        ? "上次数据"
+        : "暂不可用";
+  const plan = provider.planType ? `<span>${escapeHtml(provider.planType)}</span>` : "";
+  const error = provider.error
+    ? `<p class="quota-provider-error">${escapeHtml(provider.error)}</p>`
+    : "";
+  const windowMarkup = windows.length
+    ? `<div class="quota-window-grid">${windows
+        .map((window) => {
+          const remaining = Math.max(0, Math.min(100, Number(window.remainingPercent) || 0));
+          const digits = remaining % 1 ? remaining.toFixed(1) : remaining.toFixed(0);
+          return `
+            <div class="quota-window" data-tone="${quotaTone(remaining)}">
+              <div class="quota-window-value">
+                <span>${escapeHtml(window.label)}</span>
+                <strong>${digits}%</strong>
+              </div>
+              <div class="quota-progress" aria-hidden="true">
+                <i style="--quota-remaining: ${remaining}%"></i>
+              </div>
+              <small>${escapeHtml(formatResetTime(window.resetsAt, now))}</small>
+            </div>`;
+        })
+        .join("")}</div>`
+    : "";
+  return `
+    <section class="quota-provider is-${escapeHtml(provider.status || "unavailable")}">
+      <header class="quota-provider-head">
+        <div><strong>${escapeHtml(provider.label || provider.id)}</strong>${plan}</div>
+        <small>${providerState}</small>
+      </header>
+      ${windowMarkup}
+      ${error}
+    </section>`;
+}
+
+function renderQuota(snapshot) {
+  const board = document.getElementById("quotaBoard");
+  const content = document.getElementById("quotaContent");
+  const meta = document.getElementById("quotaMeta");
+  latestQuotaSnapshot = snapshot || { status: "unavailable", providers: [] };
+  const enabled = config?.quota?.enabled === true && latestQuotaSnapshot.status !== "disabled";
+  board.classList.toggle("is-stale", latestQuotaSnapshot.status === "stale");
+  board.classList.toggle("is-unavailable", latestQuotaSnapshot.status === "unavailable");
+  content.classList.remove("is-loading");
+
+  if (!enabled) {
+    meta.textContent = "本机登录 · 未开启";
+    content.className = "quota-content is-empty";
+    content.innerHTML = `
+      <div class="quota-empty-state">
+        <span class="quota-empty-mark" aria-hidden="true">草</span>
+        <strong>订阅额度还没开</strong>
+        <span>开启后再读取 Claude 与 Codex 的本机登录，不影响 Session 巡视。</span>
+        <button class="button secondary" type="button" data-quota-action="settings">去设置</button>
+      </div>`;
+  } else {
+    const providers = Array.isArray(latestQuotaSnapshot.providers)
+      ? latestQuotaSnapshot.providers
+      : [];
+    meta.textContent =
+      latestQuotaSnapshot.status === "unavailable"
+        ? "本机登录 · 暂不可用"
+        : latestQuotaSnapshot.status === "stale"
+          ? `本机登录 · ${quotaUpdatedText(latestQuotaSnapshot)}`
+          : quotaUpdatedText(latestQuotaSnapshot);
+    if (!providers.length) {
+      content.className = "quota-content is-empty";
+      content.innerHTML = `
+        <div class="quota-empty-state">
+          <strong>额度暂时没回来</strong>
+          <span>牛会在后台自动重试，Session 巡视照常运行。</span>
+        </div>`;
+    } else {
+      content.className = "quota-content";
+      content.innerHTML = providers.map((provider) => quotaProviderMarkup(provider)).join("");
+    }
+  }
+  if (latestSnapshot) renderTokenUsage(latestSnapshot);
+  syncInteractiveRegions();
+}
+
+function openQuotaPanel() {
+  if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+    setBubbleCollapsed(false, { silent: true });
+  }
+  setActiveBubbleOverlay("quota");
+  renderQuota(latestQuotaSnapshot);
+  window.requestAnimationFrame(() => document.getElementById("closeQuota").focus());
+}
+
+function closeQuotaPanel() {
+  setActiveBubbleOverlay(null);
+}
+
 async function saveQuickMemo() {
   const input = document.getElementById("memoText");
   const text = input.value.trim();
@@ -1037,15 +1155,26 @@ function renderTokenUsage(snapshot) {
   const hasRateLimit = Boolean(
     rateLimit &&
       Number.isFinite(Number(rateLimit.remainingPercent)) &&
-    Number(rateLimit.resetsAt) > Date.now()
+      Number(rateLimit.resetsAt) > Date.now()
   );
-  sources.textContent = hasRateLimit
-    ? `Codex 还剩 ${rateLimit.remainingPercent}%`
-    : details.length
-      ? "本机日志用量已汇总"
-      : "暂无今日记录";
+  const quotaEnabled = config?.quota?.enabled === true;
+  const quotaCopy = quotaSummary(latestQuotaSnapshot, { enabled: quotaEnabled });
+  const quotaHasWindows = (latestQuotaSnapshot?.providers || []).some(
+    (provider) => currentWindows(provider).length
+  );
+  sources.textContent = quotaEnabled
+    ? quotaCopy
+    : "点开查看订阅额度";
   const tooltip = [`今日总计 ${hasPartial ? "≥" : ""}${formatTokens(usage.tokens)}`, ...details];
-  if (hasRateLimit) {
+  if (quotaEnabled && quotaHasWindows) {
+    for (const provider of latestQuotaSnapshot.providers || []) {
+      for (const window of currentWindows(provider)) {
+        tooltip.push(
+          `${provider.label || provider.id} ${window.label} 还剩 ${window.remainingPercent}%（${formatResetTime(window.resetsAt)}）`
+        );
+      }
+    }
+  } else if (hasRateLimit) {
     tooltip.push(
       `Codex 配额还剩 ${rateLimit.remainingPercent}%（${new Date(rateLimit.resetsAt).toLocaleString()} 重置）`
     );
@@ -1871,7 +2000,13 @@ async function announceGrass(snapshot, now, blocked) {
   const rateLimit =
     snapshot.tokenUsage?.rateLimit ||
     snapshot.tokenUsage?.sources?.find((source) => source.id === "codex")?.rateLimit;
-  const alert = grassAlerts.candidate(rateLimit, now);
+  const quotaHasWindows = (latestQuotaSnapshot?.providers || []).some(
+    (provider) => currentWindows(provider, now).length
+  );
+  const alert = grassAlerts.candidate(
+    config?.quota?.enabled === true && quotaHasWindows ? latestQuotaSnapshot : rateLimit,
+    now
+  );
   if (!alert) return false;
   const urgentWait = (snapshot.rows || []).some(
     (row) => waitWhyOf(row) === "allow" || waitWhyOf(row) === "choose"
@@ -2006,7 +2141,7 @@ async function tickMarket({ force = false } = {}) {
     if (snapshot.reaction) queueMarketReaction(snapshot.reaction);
   } catch (error) {
     renderMarket({
-      providerLabel: "东方财富",
+      providerLabel: "实时行情",
       status: "unavailable",
       error: String(error?.message || error),
       quotes: [],
@@ -2018,6 +2153,50 @@ async function tickMarket({ force = false } = {}) {
   } finally {
     marketTickInFlight = false;
     scheduleMarketPolling(nextPollMs);
+  }
+}
+
+function scheduleQuotaPolling(delay = 300_000) {
+  window.clearTimeout(quotaTimer);
+  if (config?.quota?.enabled !== true) return;
+  const wait = Math.max(15_000, Math.min(300_000, Number(delay) || 300_000));
+  quotaTimer = window.setTimeout(() => {
+    if (document.hidden) {
+      scheduleQuotaPolling(60_000);
+      return;
+    }
+    tickQuota();
+  }, wait);
+}
+
+async function tickQuota({ force = false } = {}) {
+  if (quotaTickInFlight || typeof api.getQuotaSnapshot !== "function") return;
+  if (config?.quota?.enabled !== true) {
+    renderQuota({ status: "disabled", fetchedAt: null, providers: [] });
+    window.clearTimeout(quotaTimer);
+    return;
+  }
+  quotaTickInFlight = true;
+  let nextPollMs = 300_000;
+  const refresh = document.getElementById("refreshQuota");
+  refresh.disabled = true;
+  refresh.classList.add("is-refreshing");
+  try {
+    const snapshot = await api.getQuotaSnapshot({ force });
+    nextPollMs = snapshot.nextPollMs || nextPollMs;
+    renderQuota(snapshot);
+  } catch (error) {
+    renderQuota({
+      status: "unavailable",
+      fetchedAt: latestQuotaSnapshot?.fetchedAt || null,
+      providers: latestQuotaSnapshot?.providers || [],
+      error: String(error?.message || error),
+    });
+  } finally {
+    quotaTickInFlight = false;
+    refresh.disabled = false;
+    refresh.classList.remove("is-refreshing");
+    scheduleQuotaPolling(nextPollMs);
   }
 }
 
@@ -2413,6 +2592,21 @@ function bindMemo() {
     else closeMarketPanel();
   });
   document.getElementById("closeMarket").addEventListener("click", closeMarketPanel);
+  document.getElementById("tokenStrip").addEventListener("click", () => {
+    if (activeBubbleOverlay === "quota") closeQuotaPanel();
+    else openQuotaPanel();
+  });
+  document.getElementById("closeQuota").addEventListener("click", closeQuotaPanel);
+  document.getElementById("refreshQuota").addEventListener("click", () =>
+    tickQuota({ force: true })
+  );
+  document.getElementById("quotaContent").addEventListener("click", (event) => {
+    if (!event.target.closest('[data-quota-action="settings"]')) return;
+    fillSettings(config);
+    setActiveBubbleOverlay("settings");
+    setActiveSettingsTab("quota");
+    window.requestAnimationFrame(() => document.getElementById("quotaEnabled").focus());
+  });
   document.getElementById("saveMemo").addEventListener("click", saveQuickMemo);
   document.getElementById("memoText").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -2470,7 +2664,8 @@ function syncScaleControls(nextConfig) {
 }
 
 function setActiveSettingsTab(tab) {
-  const next = tab === "scan" || tab === "market" ? tab : "appearance";
+  const next =
+    tab === "scan" || tab === "market" || tab === "quota" ? tab : "appearance";
   for (const button of document.querySelectorAll("[data-settings-tab]")) {
     const selected = button.dataset.settingsTab === next;
     button.classList.toggle("is-active", selected);
@@ -2512,8 +2707,13 @@ function fillSettings(nextConfig) {
     `input[name="marketThreshold"][value="${CSS.escape(threshold)}"]`
   );
   (thresholdInput || document.querySelector('input[name="marketThreshold"][value="0.1"]')).checked = true;
+  const quota = nextConfig.quota || {};
+  document.getElementById("quotaEnabled").checked = quota.enabled === true;
+  document.getElementById("quotaClaudeEnabled").checked = quota.providers?.claude !== false;
+  document.getElementById("quotaCodexEnabled").checked = quota.providers?.codex !== false;
   syncPetVisualSettingsAvailability();
   syncMarketSettingsAvailability();
+  syncQuotaSettingsAvailability();
   draftCustom = structuredClone(nextConfig.custom || []);
   renderCustomRuntimes();
   hideCustomEditor();
@@ -2532,6 +2732,17 @@ function syncMarketSettingsAvailability() {
   for (const input of document.querySelectorAll('input[name="marketThreshold"]')) {
     input.disabled = !enabled;
   }
+}
+
+function syncQuotaSettingsAvailability() {
+  const enabled = document.getElementById("quotaEnabled").checked;
+  for (const input of [
+    document.getElementById("quotaClaudeEnabled"),
+    document.getElementById("quotaCodexEnabled"),
+  ]) {
+    input.disabled = !enabled;
+  }
+  document.querySelector(".quota-provider-settings")?.classList.toggle("is-disabled", !enabled);
 }
 
 function renderCustomRuntimes() {
@@ -2634,6 +2845,14 @@ async function saveSettings() {
       document.querySelector('input[name="marketThreshold"]:checked')?.value || 0.1
     ),
   };
+  next.quota = {
+    ...(next.quota || {}),
+    enabled: document.getElementById("quotaEnabled").checked,
+    providers: {
+      claude: document.getElementById("quotaClaudeEnabled").checked,
+      codex: document.getElementById("quotaCodexEnabled").checked,
+    },
+  };
   next.custom = structuredClone(draftCustom);
   setSettingsMessage("正在保存…");
   config = await api.saveConfig(next);
@@ -2649,10 +2868,16 @@ async function saveSettings() {
       ? { status: "disabled", quotes: [] }
       : latestMarketSnapshot
   );
+  renderQuota(
+    config.quota?.enabled === true
+      ? latestQuotaSnapshot
+      : { status: "disabled", fetchedAt: null, providers: [] }
+  );
   closeSettings();
   showToast("桌宠设置已更新");
   await tick();
   await tickMarket({ force: true });
+  await tickQuota({ force: true });
 }
 
 function bindSettings() {
@@ -2686,6 +2911,10 @@ function bindSettings() {
   document.getElementById("marketEnabled").addEventListener(
     "change",
     syncMarketSettingsAvailability
+  );
+  document.getElementById("quotaEnabled").addEventListener(
+    "change",
+    syncQuotaSettingsAvailability
   );
   document.getElementById("showPetVisuals").addEventListener(
     "change",
@@ -2729,6 +2958,7 @@ const INTERACTIVE_SURFACE_IDS = [
   "cowStage",
   "quickMemo",
   "marketBoard",
+  "quotaBoard",
   "settings",
 ];
 
@@ -2971,18 +3201,24 @@ window.addEventListener("DOMContentLoaded", async () => {
   setCowSoundEnabled(config.soundEnabled !== false);
   applyDisplayScale(config);
   fillSettings(config);
+  renderQuota({ status: "disabled", fetchedAt: null, providers: [] });
   setPetVisualsVisible(shouldShowPetVisuals(config)).catch((error) =>
     showToast(`角色图片加载失败：${error.message || error}`)
   );
   scheduleScanning();
   window.setTimeout(tick, 0);
   window.setTimeout(() => tickMarket({ force: true }), 360);
+  window.setTimeout(() => tickQuota({ force: true }), 520);
   if (typeof api.onRequestScan === "function") api.onRequestScan(tick);
 });
 
 function openMainSurface(surface) {
   if (surface === "memo") {
     openMemoPanel();
+    return;
+  }
+  if (surface === "quota") {
+    openQuotaPanel();
     return;
   }
   if (surface === "settings") {

@@ -102,3 +102,61 @@ test("MarketService retains the last valid quote when a later response is partia
   assert.equal(partial.quotes.length, 2);
   assert.equal(partial.quotes.find((item) => item.id === "hsi").status, "stale");
 });
+
+test("MarketService restores a persisted snapshot when the first live request fails", async () => {
+  let now = 20_000;
+  const initialCache = {
+    provider: "test",
+    providerLabel: "Test",
+    fetchedAt: 5_000,
+    quotes: [quote()],
+  };
+  const service = new MarketService({
+    provider: { id: "test", label: "Test", fetchQuotes: async () => { throw new Error("offline"); } },
+    initialCache,
+    now: () => now,
+    staleAfterMs: 10_000,
+    backoffMs: [1_000],
+  });
+
+  const restored = await service.getSnapshot({ force: true });
+  assert.equal(restored.status, "stale");
+  assert.equal(restored.quotes[0].price, 3316.42);
+  assert.match(restored.error, /offline/);
+  assert.equal(restored.nextPollMs, 1_000);
+});
+
+test("MarketService persists only newly fetched snapshots", async () => {
+  let now = 10_000;
+  const updates = [];
+  const service = new MarketService({
+    provider: {
+      id: "test",
+      label: "Test",
+      fetchQuotes: async () => ({ provider: "test", providerLabel: "Test", quotes: [quote()] }),
+    },
+    now: () => now,
+    pollMs: 60_000,
+    onCacheUpdate: (snapshot) => updates.push(snapshot),
+  });
+
+  await service.getSnapshot();
+  now += 1_000;
+  await service.getSnapshot();
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].fetchedAt, 10_000);
+});
+
+test("MarketService keeps a successful refresh when cache persistence fails", async () => {
+  const service = new MarketService({
+    provider: {
+      id: "test",
+      label: "Test",
+      fetchQuotes: async () => ({ provider: "test", providerLabel: "Test", quotes: [quote()] }),
+    },
+    onCacheUpdate: () => { throw new Error("read only"); },
+  });
+  const snapshot = await service.getSnapshot();
+  assert.equal(snapshot.status, "fresh");
+  assert.equal(snapshot.error, "");
+});
