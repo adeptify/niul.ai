@@ -66,7 +66,7 @@ test("session view helpers keep paths, state, token, and relative-time formattin
       statusConfidence: "low",
       subagentsWorking: 2,
     }),
-    "停犁 · 等允许 · 看不太清 · 带着 2 头小牛"
+    "等你允许 · 看不太清 · 带着 2 头小牛"
   );
   assert.equal(formatTokens(12500), "12.5K");
   assert.equal(timeAgo(1_000, 41_000), "40 秒前");

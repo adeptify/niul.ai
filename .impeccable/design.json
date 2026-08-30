@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-30T06:21:20Z",
+  "title": "Design System: 牛来",
+  "extensions": {
+    "colorMeta": {
+      "shell-ink": {
+        "role": "neutral",
+        "displayName": "Ink Shell / 墨色壳",
+        "canonical": "#1c1a16",
+        "tonalRamp": ["oklch(15% 0.014 78)", "oklch(25% 0.014 78)", "oklch(36% 0.014 78)", "oklch(48% 0.014 78)", "oklch(62% 0.012 78)", "oklch(75% 0.01 78)", "oklch(87% 0.008 78)", "oklch(95% 0.006 78)"]
+      },
+      "shell-raised": {
+        "role": "neutral",
+        "displayName": "Raised Ink / 抬起墨色",
+        "canonical": "#27241e",
+        "tonalRamp": ["oklch(15% 0.014 78)", "oklch(25% 0.014 78)", "oklch(36% 0.014 78)", "oklch(48% 0.014 78)", "oklch(62% 0.012 78)", "oklch(75% 0.01 78)", "oklch(87% 0.008 78)", "oklch(95% 0.006 78)"]
+      },
+      "shell-bone": {
+        "role": "neutral",
+        "displayName": "Bone Type / 骨白字",
+        "canonical": "#f3eee4",
+        "tonalRamp": ["oklch(15% 0.01 78)", "oklch(27% 0.01 78)", "oklch(40% 0.01 78)", "oklch(54% 0.01 78)", "oklch(67% 0.009 78)", "oklch(79% 0.008 78)", "oklch(89% 0.007 78)", "oklch(96% 0.006 78)"]
+      },
+      "shell-muted": {
+        "role": "neutral",
+        "displayName": "Muted Bone / 柔骨白",
+        "canonical": "#b7afa3",
+        "tonalRamp": ["oklch(15% 0.01 78)", "oklch(27% 0.01 78)", "oklch(40% 0.01 78)", "oklch(54% 0.01 78)", "oklch(67% 0.009 78)", "oklch(79% 0.008 78)", "oklch(89% 0.007 78)", "oklch(96% 0.006 78)"]
+      },
+      "cattle-tag": {
+        "role": "primary",
+        "displayName": "Cattle-tag Amber / 牛牌琥珀",
+        "canonical": "#d7a630",
+        "tonalRamp": ["oklch(15% 0.05 82)", "oklch(25% 0.08 82)", "oklch(36% 0.11 82)", "oklch(48% 0.14 82)", "oklch(60% 0.15 82)", "oklch(72% 0.12 82)", "oklch(84% 0.08 82)", "oklch(95% 0.03 82)"]
+      },
+      "cattle-tag-bright": {
+        "role": "primary",
+        "displayName": "Bright Cattle-tag / 亮牛牌",
+        "canonical": "#e8c46a",
+        "tonalRamp": ["oklch(15% 0.05 82)", "oklch(25% 0.08 82)", "oklch(36% 0.11 82)", "oklch(48% 0.14 82)", "oklch(60% 0.15 82)", "oklch(72% 0.12 82)", "oklch(84% 0.08 82)", "oklch(95% 0.03 82)"]
+      },
+      "workspace-paper": {
+        "role": "neutral",
+        "displayName": "Warm Ledger Paper / 暖账纸",
+        "canonical": "#eee4d4",
+        "tonalRamp": ["oklch(15% 0.018 76)", "oklch(27% 0.022 76)", "oklch(40% 0.026 76)", "oklch(54% 0.03 76)", "oklch(67% 0.028 76)", "oklch(79% 0.024 76)", "oklch(89% 0.018 76)", "oklch(95% 0.012 76)"]
+      },
+      "workspace-paper-deep": {
+        "role": "neutral",
+        "displayName": "Deep Ledger Paper / 深暖账纸",
+        "canonical": "#e5d8c5",
+        "tonalRamp": ["oklch(15% 0.018 76)", "oklch(27% 0.022 76)", "oklch(40% 0.026 76)", "oklch(54% 0.03 76)", "oklch(67% 0.028 76)", "oklch(79% 0.024 76)", "oklch(89% 0.018 76)", "oklch(95% 0.012 76)"]
+      },
+      "workspace-field": {
+        "role": "neutral",
+        "displayName": "Warm Field / 暖纸输入面",
+        "canonical": "#f8f1e5",
+        "tonalRamp": ["oklch(15% 0.018 76)", "oklch(27% 0.022 76)", "oklch(40% 0.026 76)", "oklch(54% 0.03 76)", "oklch(67% 0.028 76)", "oklch(79% 0.024 76)", "oklch(89% 0.018 76)", "oklch(95% 0.012 76)"]
+      },
+      "workspace-text": {
+        "role": "neutral",
+        "displayName": "Ledger Text / 账簿主字",
+        "canonical": "#241f18",
+        "tonalRamp": ["oklch(15% 0.014 70)", "oklch(26% 0.014 70)", "oklch(38% 0.014 70)", "oklch(51% 0.013 70)", "oklch(64% 0.012 70)", "oklch(76% 0.01 70)", "oklch(88% 0.008 70)", "oklch(95% 0.006 70)"]
+      },
+      "workspace-muted": {
+        "role": "neutral",
+        "displayName": "Ledger Muted / 账簿次字",
+        "canonical": "#706657",
+        "tonalRamp": ["oklch(15% 0.014 70)", "oklch(26% 0.014 70)", "oklch(38% 0.014 70)", "oklch(51% 0.013 70)", "oklch(64% 0.012 70)", "oklch(76% 0.01 70)", "oklch(88% 0.008 70)", "oklch(95% 0.006 70)"]
+      },
+      "light-paper": {
+        "role": "neutral",
+        "displayName": "Light Ledger Paper / 浅色账纸",
+        "canonical": "#fffdf8",
+        "tonalRamp": ["oklch(15% 0.01 78)", "oklch(27% 0.01 78)", "oklch(40% 0.01 78)", "oklch(54% 0.01 78)", "oklch(67% 0.009 78)", "oklch(79% 0.008 78)", "oklch(89% 0.007 78)", "oklch(96% 0.006 78)"]
+      },
+      "light-paper-deep": {
+        "role": "neutral",
+        "displayName": "Light Paper Deep / 浅色层纸",
+        "canonical": "#f3ecdf",
+        "tonalRamp": ["oklch(15% 0.01 78)", "oklch(27% 0.01 78)", "oklch(40% 0.01 78)", "oklch(54% 0.01 78)", "oklch(67% 0.009 78)", "oklch(79% 0.008 78)", "oklch(89% 0.007 78)", "oklch(96% 0.006 78)"]
+      },
+      "light-field": {
+        "role": "neutral",
+        "displayName": "Light Field / 浅色输入面",
+        "canonical": "#fffaf2",
+        "tonalRamp": ["oklch(15% 0.01 78)", "oklch(27% 0.01 78)", "oklch(40% 0.01 78)", "oklch(54% 0.01 78)", "oklch(67% 0.009 78)", "oklch(79% 0.008 78)", "oklch(89% 0.007 78)", "oklch(96% 0.006 78)"]
+      },
+      "working": {
+        "role": "secondary",
+        "displayName": "Working Pasture Green / 工作绿",
+        "canonical": "#78c59f",
+        "tonalRamp": ["oklch(15% 0.04 154)", "oklch(25% 0.06 154)", "oklch(36% 0.08 154)", "oklch(48% 0.1 154)", "oklch(60% 0.1 154)", "oklch(72% 0.08 154)", "oklch(84% 0.05 154)", "oklch(95% 0.02 154)"]
+      },
+      "waiting": {
+        "role": "secondary",
+        "displayName": "Waiting Grain Amber / 等你琥珀",
+        "canonical": "#d4b05c",
+        "tonalRamp": ["oklch(15% 0.04 83)", "oklch(25% 0.07 83)", "oklch(36% 0.1 83)", "oklch(48% 0.12 83)", "oklch(60% 0.12 83)", "oklch(72% 0.1 83)", "oklch(84% 0.06 83)", "oklch(95% 0.025 83)"]
+      },
+      "idle": {
+        "role": "secondary",
+        "displayName": "Idle Ledger Blue / 闲置蓝",
+        "canonical": "#8ab4e4",
+        "tonalRamp": ["oklch(15% 0.04 248)", "oklch(25% 0.06 248)", "oklch(36% 0.08 248)", "oklch(48% 0.1 248)", "oklch(60% 0.1 248)", "oklch(72% 0.08 248)", "oklch(84% 0.05 248)", "oklch(95% 0.02 248)"]
+      },
+      "offline": {
+        "role": "secondary",
+        "displayName": "Offline Dust / 离线灰",
+        "canonical": "#9a9388",
+        "tonalRamp": ["oklch(15% 0.008 75)", "oklch(26% 0.01 75)", "oklch(38% 0.012 75)", "oklch(51% 0.012 75)", "oklch(64% 0.011 75)", "oklch(76% 0.009 75)", "oklch(88% 0.007 75)", "oklch(95% 0.005 75)"]
+      },
+      "working-label": {
+        "role": "secondary",
+        "displayName": "Working Label / 工作文字",
+        "canonical": "#246747",
+        "tonalRamp": ["oklch(15% 0.04 154)", "oklch(25% 0.06 154)", "oklch(36% 0.08 154)", "oklch(48% 0.1 154)", "oklch(60% 0.1 154)", "oklch(72% 0.08 154)", "oklch(84% 0.05 154)", "oklch(95% 0.02 154)"]
+      },
+      "waiting-label": {
+        "role": "secondary",
+        "displayName": "Waiting Label / 等你文字",
+        "canonical": "#6f5010",
+        "tonalRamp": ["oklch(15% 0.04 83)", "oklch(25% 0.07 83)", "oklch(36% 0.1 83)", "oklch(48% 0.12 83)", "oklch(60% 0.12 83)", "oklch(72% 0.1 83)", "oklch(84% 0.06 83)", "oklch(95% 0.025 83)"]
+      },
+      "idle-label": {
+        "role": "secondary",
+        "displayName": "Idle Label / 闲置文字",
+        "canonical": "#315f8c",
+        "tonalRamp": ["oklch(15% 0.04 248)", "oklch(25% 0.06 248)", "oklch(36% 0.08 248)", "oklch(48% 0.1 248)", "oklch(60% 0.1 248)", "oklch(72% 0.08 248)", "oklch(84% 0.05 248)", "oklch(95% 0.02 248)"]
+      },
+      "offline-label": {
+        "role": "secondary",
+        "displayName": "Offline Label / 离线文字",
+        "canonical": "#554f47",
+        "tonalRamp": ["oklch(15% 0.008 75)", "oklch(26% 0.01 75)", "oklch(38% 0.012 75)", "oklch(51% 0.012 75)", "oklch(64% 0.011 75)", "oklch(76% 0.009 75)", "oklch(88% 0.007 75)", "oklch(95% 0.005 75)"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Workspace Headline / 工作区标题", "purpose": "Session 全景、大盘、牛记与额度的工作面标题。" },
+      "title": { "displayName": "Companion Title / 陪伴标题", "purpose": "紧凑态中牛对当前状态的短判断。" },
+      "body": { "displayName": "Operational Body / 操作正文", "purpose": "Session、行情、Memo 与表单的主要信息。" },
+      "label": { "displayName": "Status Label / 状态标签", "purpose": "状态、kicker、计数、时间与按钮。" },
+      "mono": { "displayName": "Path Mono / 路径等宽", "purpose": "仅用于 Session 工作目录。" }
+    },
+    "shadows": [
+      { "name": "desktop-shell", "value": "0 18px 48px rgba(16, 13, 10, 0.34), 0 3px 8px rgba(18, 14, 8, 0.22)", "purpose": "只抬起透明桌面窗口中的最外层气泡壳。" },
+      { "name": "workspace-flat", "value": "none", "purpose": "汇总、Session、大盘、牛记、额度与设置工作面保持平铺。" }
+    ],
+    "motion": [
+      { "name": "workspace-view-transition", "value": "240ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "壳与角色在工作区打开、关闭和工作面切换时保持空间连续。" },
+      { "name": "workspace-shell-fallback", "value": "260ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "View Transition 不可用时的壳展开回退。" },
+      { "name": "workspace-content", "value": "260ms 70ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "工作面内容轻微上移淡入。" },
+      { "name": "state-feedback", "value": "140ms ease", "purpose": "汇总、Session、行情和控件的 hover 反馈。" },
+      { "name": "press-feedback", "value": "100ms ease", "purpose": "可点击控件的轻微按压缩放。" },
+      { "name": "reduced-motion", "value": "1ms; no transform or transition", "purpose": "减少动态效果下移除位移、缩放和常规 transition。" }
+    ],
+    "breakpoints": [
+      { "name": "narrow-workspace", "value": "520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Workspace Shell",
+      "kind": "custom",
+      "refersTo": "workspace-shell",
+      "description": "默认 448px 的单体气泡壳；工作区打开时同一壳舒展到约 680px。",
+      "html": "<section class=\"ds-workspace-shell\"><header class=\"ds-workspace-shell__head\"><strong>牛来</strong><span>刚刚巡视</span></header><div class=\"ds-workspace-shell__paper\">同一个壳，多张工作面</div></section>",
+      "css": ".ds-workspace-shell { width: min(448px, calc(100vw - 24px)); overflow: hidden; border: 1px solid var(--hairline); border-radius: 22px; background: var(--ink); color: var(--bone); box-shadow: var(--shadow); font-family: var(--font-body); } .ds-workspace-shell__head { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; } .ds-workspace-shell__head span { color: var(--bone-muted); font-size: 12px; } .ds-workspace-shell__paper { min-height: 120px; padding: 24px 26px; border-top: 1px solid var(--workspace-line); background: var(--workspace-paper); color: var(--workspace-text); }"
+    },
+    {
+      "name": "Header Icon Button",
+      "kind": "button",
+      "refersTo": "header-icon-button",
+      "description": "壳头部的 34px 图标动作，适用于展开、牛记、大盘、设置和电源菜单。",
+      "html": "<button class=\"ds-icon-button\" type=\"button\" aria-label=\"打开工作面\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m7 10 5 5 5-5\"></path></svg></button>",
+      "css": ".ds-icon-button { display: inline-grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--bone-muted); cursor: pointer; transition: background 140ms ease, color 140ms ease, transform 100ms ease; } .ds-icon-button svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; } .ds-icon-button:hover, .ds-icon-button[aria-expanded=\"true\"] { background: var(--hover); color: var(--bone); } .ds-icon-button:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: 2px; } .ds-icon-button:active { transform: scale(0.94); }"
+    },
+    {
+      "name": "Working Status Summary",
+      "kind": "nav",
+      "refersTo": "status-summary",
+      "description": "汇总栏中的文字、数量和圆点三件套；其他状态只替换语义颜色。",
+      "html": "<button class=\"ds-status-summary ds-working\" type=\"button\" aria-pressed=\"false\"><i></i><b>3</b><em>工作中</em></button>",
+      "css": ".ds-status-summary { --state-color: var(--workspace-muted); --state-text: var(--offline-label); display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--state-color) 12%, transparent); color: var(--state-text); font-family: var(--font-rounded); font-size: 11px; cursor: pointer; transition: background 140ms ease, transform 100ms ease; } .ds-status-summary.ds-working { --state-color: var(--working); --state-text: var(--working-label); } .ds-status-summary i { width: 8px; height: 8px; border-radius: 50%; background: var(--state-color); } .ds-status-summary b, .ds-status-summary em { font: inherit; font-style: normal; } .ds-status-summary:hover, .ds-status-summary[aria-pressed=\"true\"] { background: color-mix(in srgb, var(--state-color) 22%, transparent); } .ds-status-summary:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: 2px; } .ds-status-summary:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Waiting Session Ledger Row",
+      "kind": "custom",
+      "refersTo": "session-row",
+      "description": "全景中的签名账簿行，同时呈现状态、项目、路径、工作摘要、Runtime、时间和进入箭头。",
+      "html": "<button class=\"ds-session-row ds-waiting\" type=\"button\"><span class=\"ds-session-state\"><i></i>等你</span><span class=\"ds-session-copy\"><span><strong>niul.ai</strong><code>~/code/niul.ai</code></span><span><strong>等待确认 UI</strong><small>Codex · 2 分钟前</small></span></span><span class=\"ds-session-arrow\">›</span></button>",
+      "css": ".ds-session-row { --state-color: var(--waiting); --state-text: var(--waiting-label); --state-surface: color-mix(in srgb, var(--waiting) 15%, transparent); display: grid; width: 100%; min-height: 59px; grid-template-columns: 82px minmax(0, 1fr) 16px; align-items: center; gap: 10px; padding: 8px 24px 8px 26px; border: 0; border-bottom: 1px solid var(--workspace-line); background: color-mix(in srgb, var(--waiting) 5%, transparent); color: var(--workspace-text); text-align: left; cursor: pointer; transition: background 140ms ease, transform 120ms ease; } .ds-session-state { display: inline-flex; width: max-content; min-height: 27px; align-items: center; gap: 6px; padding: 0 9px; border-radius: 8px; background: var(--state-surface); color: var(--state-text); font-size: 11px; } .ds-session-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--state-color); } .ds-session-copy { display: grid; grid-template-columns: minmax(118px, .9fr) minmax(150px, 1.15fr); gap: 14px; } .ds-session-copy > span { display: grid; min-width: 0; gap: 4px; } .ds-session-copy strong { overflow: hidden; font-size: 12px; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; } .ds-session-copy code, .ds-session-copy small { overflow: hidden; color: var(--workspace-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; } .ds-session-row:hover { background: color-mix(in srgb, var(--waiting) 10%, transparent); } .ds-session-row:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: -2px; } .ds-session-row:active { transform: scale(.995); }"
+    },
+    {
+      "name": "Market Quote Cell",
+      "kind": "card",
+      "refersTo": "market-cell",
+      "description": "4×2 大盘网格中的连续行情格，不作为独立悬浮卡片。",
+      "html": "<div class=\"ds-market-quote ds-up\" tabindex=\"0\"><span class=\"ds-market-name\">上证指数</span><span class=\"ds-market-change\">+0.42%</span><strong>3,869.12</strong></div>",
+      "css": ".ds-market-quote { display: grid; min-height: 112px; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: \"name change\" \"price price\"; align-content: center; gap: 5px 8px; padding: 14px 15px; border-right: 1px solid var(--workspace-line); border-bottom: 1px solid var(--workspace-line); background: var(--workspace-paper); color: var(--workspace-text); transition: background 140ms ease; } .ds-market-name { grid-area: name; color: var(--workspace-muted); font-size: 12px; } .ds-market-change { grid-area: change; color: var(--market-up); font-size: 12px; font-weight: 560; } .ds-market-quote strong { grid-area: price; overflow: hidden; font-size: 20px; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; } .ds-market-quote:hover, .ds-market-quote:focus-visible { background: var(--workspace-hover); } .ds-market-quote:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: -2px; }"
+    },
+    {
+      "name": "Memo Field",
+      "kind": "input",
+      "refersTo": "memo-field",
+      "description": "牛记编辑区的暖纸内陷文本域。",
+      "html": "<textarea class=\"ds-memo-field\" placeholder=\"写下一个念头、待办，或稍后要接着做的事…\"></textarea>",
+      "css": ".ds-memo-field { width: 100%; min-height: 112px; padding: 13px 14px; resize: none; border: 1px solid var(--workspace-line); border-radius: 11px; background: var(--workspace-field); color: var(--workspace-text); font-family: var(--font-body); font-size: 12px; line-height: 1.6; } .ds-memo-field::placeholder { color: var(--workspace-muted); } .ds-memo-field:hover { border-color: color-mix(in srgb, var(--workspace-text) 24%, transparent); } .ds-memo-field:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: 2px; }"
+    },
+    {
+      "name": "Reminder Chip",
+      "kind": "chip",
+      "refersTo": "reminder-chip",
+      "description": "牛记提醒时间的胶囊式单选动作。",
+      "html": "<button class=\"ds-reminder-chip is-active\" type=\"button\">1 小时</button>",
+      "css": ".ds-reminder-chip { min-height: 30px; padding: 0 10px; border: 1px solid var(--workspace-line); border-radius: 999px; background: transparent; color: var(--workspace-muted); font-family: var(--font-rounded); font-size: 11px; cursor: pointer; transition: background 140ms ease, color 140ms ease, transform 100ms ease; } .ds-reminder-chip:hover { background: var(--workspace-hover); color: var(--workspace-text); } .ds-reminder-chip.is-active { border-color: color-mix(in srgb, var(--tag) 38%, var(--workspace-line)); background: color-mix(in srgb, var(--tag) 12%, transparent); color: color-mix(in srgb, var(--tag) 74%, var(--workspace-text)); } .ds-reminder-chip:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: 2px; } .ds-reminder-chip:active { transform: scale(.97); }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "暖纸工作面上的深色确认动作。",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">记下来</button>",
+      "css": ".ds-button-primary { min-height: 34px; padding: 0 13px; border: 0; border-radius: 9px; background: var(--workspace-text); color: var(--workspace-paper); font-family: var(--font-rounded); font-size: 11px; font-weight: 650; cursor: pointer; transition: background 140ms ease, transform 100ms ease; } .ds-button-primary:hover { background: var(--workspace-muted); color: var(--workspace-paper); } .ds-button-primary:focus-visible { outline: 2px solid var(--tag-bright); outline-offset: 2px; } .ds-button-primary:active { transform: scale(.97); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field Ledger / 牧场巡视账簿",
+    "overview": "牛来是一套 Operate 模式的桌面工具界面：它把本地 AI Session 写成一张可以持续扫读的巡视账簿，让状态、工作摘要与回到 Runtime 的动作优先于装饰表达。视觉隐喻来自牲畜巡视牌、墨色外壳和暖纸账页；那头粗糙、笨拙的牛仍是最大的生命体，但工作区保持克制、清楚、适合长时间停留。\n\n紧凑态和工作区不是两套界面。紧凑态保留头部、状态汇总和优先 Session 预览；展开后，同一个壳向左舒展并切换为 Session、大盘、牛记、额度或设置工作面。默认深色主题以深色壳包住暖纸内容面；浅色主题把壳与内容统一切换到全浅色材料。",
+    "keyCharacteristics": [
+      "Operate 优先：先读状态，再理解工作，再执行动作。",
+      "单壳多工作面，不在壳内继续叠放厚重的深色卡片。",
+      "紧凑但不拥挤；宽工作区把信息展开成可扫读的账簿。",
+      "暖纸、细分隔线、琥珀巡视牌和四种低饱和状态色共同建立性格。",
+      "动效只解释空间展开、工作面切换和操作反馈。"
+    ],
+    "rules": [
+      { "name": "The Two-Material Rule", "body": "默认主题只能由深色壳与暖纸工作面构成；浅色主题必须整体转为浅色，不能留下孤立的深色内层卡片。", "section": "colors" },
+      { "name": "The Text-and-Dot Rule", "body": "working、waiting、idle、offline 必须同时出现状态文字与圆点颜色；颜色承担快速扫描，文字承担无障碍识别。", "section": "colors" },
+      { "name": "The Three-Voice Rule", "body": "圆体说“这是哪里和什么状态”，系统正文说“正在发生什么”，等宽体只说“它在哪个目录”。", "section": "typography" },
+      { "name": "The One-Shell Rule", "body": "Session、大盘、牛记、额度与设置都在同一个壳内切换工作面；工作区展开不创建第二个浮层容器。", "section": "layout" },
+      { "name": "The Flat-Within Rule", "body": "壳可以离开桌面，壳内的纸张不能彼此漂浮；内部层级由色调、边界和状态反馈表达。", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** 保持 Operate 模式：任何新增工作面都先保证状态、信息和下一步动作可以快速扫读。",
+      "**Do** 复用 448px 紧凑壳、约 680px 工作区与 520px 响应式边界。",
+      "**Do** 让状态同时拥有文字和圆点，并在汇总与 Session 行中保持同一语义映射。",
+      "**Do** 让 Session、大盘与牛记沿用同一个壳、纸张和焦点反馈。",
+      "**Do** 在空间变化上沿用 240ms View Transition，并完整尊重减少动态效果偏好。"
+    ],
+    "donts": [
+      "**Don't** 在深色壳内再盖一张厚重的深色工作卡片。",
+      "**Don't** 把 Session 全景退化为通用 Dashboard、表格后台或一组彼此悬浮的卡片。",
+      "**Don't** 只用颜色表达 working、waiting、idle 或 offline。",
+      "**Don't** 把宽工作区的大盘挤回 2×4，或把牛记重新堆成单列窄栏。",
+      "**Don't** 添加持续、高强度或纯装饰性的动效。"
+    ]
+  }
+}

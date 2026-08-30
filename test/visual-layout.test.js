@@ -111,6 +111,22 @@ function cssProperty(selector, property) {
   return value;
 }
 
+function contrastRatio(foreground, background) {
+  const luminance = (hex) => {
+    const channels = hex
+      .replace("#", "")
+      .match(/.{2}/g)
+      .map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((channel) =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      );
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 test("top bar keeps the approved six-action order", () => {
   const actions = extract(html, 'class="head-actions"', "</div>");
   const ids = [...actions.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
@@ -131,7 +147,7 @@ test("herd styles load after the shared shell and stay in their own package", ()
   assert.match(herdCss, /#cowStage\[data-herd-mode="true"\]/);
 });
 
-test("memo, market, quota, and settings share opaque overlays inside bubble", () => {
+test("memo, market, quota, and settings share inline workspaces inside bubble", () => {
   const bubbleStart = html.indexOf('<main class="bubble"');
   const bubbleEnd = html.indexOf("<!-- /bubble -->");
   assert.notEqual(bubbleStart, -1, "missing bubble main");
@@ -151,9 +167,11 @@ test("memo, market, quota, and settings share opaque overlays inside bubble", ()
   assert.ok(quota && quota[0].includes("bubble-overlay"));
   assert.ok(settings && settings[0].includes("bubble-overlay"));
   const overlay = cssRule(".bubble-overlay");
+  assert.match(overlay, /position\s*:\s*relative/);
   const bg = overlay.match(/background\s*:\s*([^;]+)/);
   assert.ok(bg, "missing background on .bubble-overlay");
   assert.ok(!/transparent/i.test(bg[1]), "bubble-overlay background must not be transparent");
+  assert.match(bg[1], /workspace-paper/);
 });
 
 test("power menu keeps controls and adds appearance before quit", () => {
@@ -249,13 +267,14 @@ test("quiet status bar exposes exactly four semantic filters", () => {
   }
   const waiting = rail.match(/data-status-filter="waiting"[^>]*/);
   assert.ok(waiting && /\bis-priority\b/.test(waiting[0]), "waiting must have is-priority");
+  for (const label of ["工作中", "等你", "闲置", "不在线"]) assert.ok(rail.includes(label));
 });
 
-test("session cards use two information rows without a dark inner band", () => {
+test("session cards expose state, identity, activity, and navigation as one ledger row", () => {
   const template = extract(js, "function renderSessionRows", "for (const element of list");
   assert.match(template, /class="session-identity"/);
   assert.match(template, /class="session-work"/);
-  assert.match(template, /class="session-rail"/);
+  assert.match(template, /class="session-state"/);
   assert.match(template, /class="session-name"/);
   assert.match(template, /class="session-summary"/);
   assert.match(template, /class="session-path"/);
@@ -263,13 +282,13 @@ test("session cards use two information rows without a dark inner band", () => {
   assert.match(template, /class="open-arrow"/);
   const identity = extract(template, 'class="session-identity"', 'class="session-work"');
   assert.match(identity, /session-name/);
-  assert.match(identity, /session-summary/);
-  assert.doesNotMatch(identity, /session-path|session-agent|session-meta|runtime-tag/);
+  assert.match(identity, /session-path/);
+  assert.doesNotMatch(identity, /session-summary|session-agent|session-meta|runtime-tag/);
   const work = extract(template, 'class="session-work"', 'class="open-arrow"');
-  assert.match(work, /session-path/);
+  assert.match(work, /session-summary/);
   assert.match(work, /session-agent/);
   assert.match(work, /\$\{escapeHtml\(row\.label\)\} · \$\{escapeHtml\(timeAgo\(/);
-  assert.doesNotMatch(work, /session-summary|runtime-tag|session-meta/);
+  assert.doesNotMatch(work, /session-path|runtime-tag|session-meta/);
   assert.doesNotMatch(template, /runtime-tag/);
   const identityPos = template.indexOf("session-identity");
   const workPos = template.indexOf("session-work");
@@ -324,16 +343,16 @@ test("companion intro keeps a persistent title and a live caption", () => {
   assert.match(intro, /<h2 class="companion-title">我看着呢。<\/h2>/);
   assert.match(intro, /<p id="statusCaption">/);
   const title = cssRule(".companion-title");
-  assert.match(title, /font-size\s*:\s*15px/);
-  assert.match(title, /font-weight\s*:\s*(600|560|500)/);
-  assert.match(css, /#statusCaption\s*\{[^}]*font-size\s*:\s*13px/);
-  assert.match(css, /#statusCaption\s*\{[^}]*color\s*:\s*var\(--bone-muted\)/);
+  assert.match(title, /font-size\s*:\s*17px/);
+  assert.match(title, /font-weight\s*:\s*520/);
+  assert.match(cssRule("#statusCaption"), /font-size\s*:\s*11px/);
+  assert.match(cssRule("#statusCaption"), /color\s*:\s*var\(--workspace-muted\)/);
 });
 
 test("companion status stays on one calm line", () => {
   assert.equal(cssProperty(".companion-intro", "display"), "flex");
   assert.equal(cssProperty(".companion-intro", "align-items"), "baseline");
-  assert.equal(cssProperty(".companion-title", "font-size"), "15px");
+  assert.equal(cssProperty(".companion-title", "font-size"), "17px");
   assert.equal(cssProperty("#statusCaption", "margin"), "0");
   assert.equal(cssProperty("#statusCaption", "white-space"), "nowrap");
   assert.equal(cssProperty("#statusCaption", "text-overflow"), "ellipsis");
@@ -349,10 +368,11 @@ test("companion caption uses calm task wording", () => {
   assert.doesNotMatch(caption, /我看着呢。/);
 });
 
-test("session total shows the filtered count only", () => {
+test("compact preview caps at two while panorama keeps every filtered row", () => {
   const render = extract(js, "function renderSessionRows", "if (!rows.length)");
+  assert.match(render, /panoramaOpen\s*\?\s*orderedRows\s*:\s*orderedSessionRows\(snapshot\.rows\)\.slice\(0, 2\)/);
   assert.match(render, /\$\{rows\.length\} 个/);
-  assert.doesNotMatch(render, /\/ \$\{snapshot\.rows\.length\}/);
+  assert.match(render, /查看全部 \$\{snapshot\.rows\.length\} 个 Session/);
 });
 
 test("visible session paths compact the macOS home prefix", () => {
@@ -361,56 +381,47 @@ test("visible session paths compact the macOS home prefix", () => {
   assert.match(js, /class="session-path"[^>]*>\$\{escapeHtml\(compactDisplayPath\(/);
 });
 
-test("session identity and work grids pin summary then agent time", () => {
+test("session identity and activity remain separate readable columns", () => {
   assert.match(cssRule(".session-work"), /background\s*:\s*transparent/);
-  assert.match(
-    css,
-    /\.session-identity\s*\{[^}]*grid-template-columns\s*:\s*minmax\(\d+px,\s*34%\)\s+minmax\(0,\s*1fr\)/
-  );
-  assert.match(
-    css,
-    /\.session-work\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,\s*1fr\)\s+fit-content\(34%\)/
-  );
-  assert.match(css, /\.session-agent\s*\{[^}]*text-align\s*:\s*right/);
-  assert.match(css, /\.session-agent\s*\{[^}]*justify-self\s*:\s*end/);
+  assert.match(cssRule(".session-copy"), /grid-template-columns\s*:\s*minmax\(118px,\s*0\.9fr\)\s+minmax\(150px,\s*1\.15fr\)/);
+  assert.match(cssRule(".session-identity"), /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
+  assert.equal(cssProperty(".session-agent", "text-align"), "left");
   assert.doesNotMatch(css, /\.runtime-tag\s*\{[^}]*border-radius\s*:\s*999px/);
   assert.doesNotMatch(css, /\.session-path\s*\{[^}]*max-width\s*:\s*42%/);
 });
 
-test("session rail leaves readable space before card content", () => {
-  const row = cssRule(".session-row");
-  const rail = cssRule(".session-rail");
-  const columns = declarationValue(
-    row.slice(row.indexOf("{") + 1, row.lastIndexOf("}")),
-    "grid-template-columns"
-  );
-  const gap = Number((row.match(/\bgap\s*:\s*(\d+(?:\.\d+)?)px/) || [])[1]);
-  const firstColumn = Number((columns?.match(/^(\d+(?:\.\d+)?)px/) || [])[1]);
-  const railWidth = Number((rail.match(/\bwidth\s*:\s*(\d+(?:\.\d+)?)px/) || [])[1]);
-  const railMarginLeft = Number(
-    (rail.match(/\bmargin\s*:\s*[^;]*\s(\d+(?:\.\d+)?)px\s*;/) || [])[1]
-  );
-  for (const value of [gap, firstColumn, railWidth, railMarginLeft]) {
-    assert.ok(Number.isFinite(value), "session rail spacing must use measurable px values");
-  }
-  const clearSpace = firstColumn + gap - railMarginLeft - railWidth;
-  assert.ok(clearSpace >= 8, `session rail only leaves ${clearSpace}px before content`);
+test("session status is a text-and-color label rather than a thin rail", () => {
+  const state = cssRule(".session-state");
+  assert.match(state, /min-height\s*:\s*27px/);
+  assert.match(state, /background\s*:\s*var\(--state-surface\)/);
+  assert.match(state, /color\s*:\s*var\(--state-text\)/);
+  assert.match(cssRule(".session-state i"), /background\s*:\s*var\(--state-color\)/);
 });
 
-test("waiting cards use a light whole-card tint", () => {
-  const dark = css.match(/:root\s*\{[\s\S]*?--waiting-surface:\s*([^;]+);/);
-  const light = css.match(/:root\[data-theme="light"\]\s*\{[\s\S]*?--waiting-surface:\s*([^;]+);/);
-  assert.ok(dark, "missing dark waiting-surface");
-  assert.ok(light, "missing light waiting-surface");
-  for (const value of [dark[1], light[1]]) {
-    const alpha = Number((value.match(/,\s*(0\.\d+)\s*\)/) || [])[1]);
-    assert.ok(Number.isFinite(alpha) && alpha > 0 && alpha <= 0.09, `waiting fill too strong: ${value}`);
+test("status text keeps accessible contrast while dots retain semantic color", () => {
+  const papers = [
+    cssProperty(":root", "--workspace-paper"),
+    cssProperty(':root[data-theme="light"]', "--workspace-paper"),
+  ];
+  for (const status of ["working", "waiting", "idle", "offline"]) {
+    const label = cssProperty(":root", `--${status}-label`);
+    assert.match(label, /^#[0-9a-f]{6}$/i, `missing ${status} label color`);
+    for (const paper of papers) {
+      assert.ok(
+        contrastRatio(label, paper) >= 4.5,
+        `${status} label must reach 4.5:1 against ${paper}`
+      );
+    }
   }
+  assert.match(cssRule(".summary-item i"), /background\s*:\s*var\(--state-color\)/);
+});
+
+test("waiting rows receive a restrained panorama tint while every status keeps its own label", () => {
+  assert.match(css, /\.session-row\.waiting[\s\S]*?--state-color\s*:\s*var\(--waiting\)/);
   assert.match(
     css,
-    /\.session-row\.waiting,\s*\n?\s*\.session-row\[data-status="waiting"\]\s*\{[^}]*background\s*:\s*var\(--waiting-surface\)/
+    /\.bubble\[data-surface="sessions"\] \.session-row\.waiting\s*\{[^}]*background\s*:\s*color-mix\(in srgb, var\(--waiting\) 5%/
   );
-  assert.doesNotMatch(css, /\.session-work[^{]*waiting|waiting[^{]*\.session-work/);
 });
 
 test("settings labels match the approved A demo", () => {
@@ -494,67 +505,65 @@ test("opening memo or market expands a collapsed bubble first", () => {
   }
 });
 
-test("restored status filter sanitizes transient all to waiting", () => {
+test("restored status filter accepts all and defaults invalid values to all", () => {
   const restore = js.slice(js.indexOf("STATUS_FILTER_VERSION"), js.indexOf("let config"));
+  assert.match(restore, /new Set\(\["all"/);
   assert.match(restore, /working/);
   assert.match(restore, /waiting/);
   assert.match(restore, /idle/);
   assert.match(restore, /offline/);
   assert.match(restore, /\.has\(|\.includes\(/);
-  assert.match(restore, /"waiting"/);
-  assert.match(restore, /all|"all"|stored|restored|statusFilter/);
+  assert.match(restore, /:\s*"all"/);
 });
 
-test("bubble shell is 448px with a 52px top bar", () => {
-  const bubble = cssRule(".bubble");
-  assert.match(bubble, /width\s*:\s*min\(\s*448px/);
-  assert.doesNotMatch(bubble, /min\(\s*500px/);
+test("bubble stays 448px in compact mode and expands to a 680px workspace", () => {
+  assert.match(css, /\.bubble\s*\{[\s\S]*?width\s*:\s*min\(\s*448px/);
+  assert.match(cssRule(".bubble.is-workspace-open"), /width\s*:\s*min\(680px/);
+  assert.match(cssRule("#pet.is-workspace-open"), /width\s*:\s*min\(704px/);
   const head = cssRule(".bubble-head");
   assert.match(head, /min-height\s*:\s*52px/);
   const intro = cssRule(".companion-intro");
-  assert.match(intro, /(?:min-height|height)\s*:\s*44px/);
+  assert.match(intro, /(?:min-height|height)\s*:\s*52px/);
   const icon = cssRule(".icon-button");
   assert.match(icon, /(?:width|min-width|height|min-height)\s*:\s*3[24]px/);
 });
 
-test("session cards are compact two-row rows with a centered arrow column", () => {
+test("session cards are compact ledger rows with a state label and arrow", () => {
   const row = cssRule(".session-row");
-  assert.match(row, /grid-template-columns\s*:\s*[^\n;]*auto/);
+  assert.match(row, /grid-template-columns\s*:\s*64px\s+minmax\(0,\s*1fr\)\s+16px/);
   assert.match(row, /align-items\s*:\s*center/);
   const minHeight = Number((row.match(/min-height\s*:\s*(\d+)px/) || [])[1]);
-  assert.ok(minHeight >= 68 && minHeight <= 72, `session min-height ${minHeight} not 68-72`);
-  assert.match(row, /border-radius\s*:\s*13px/);
-  assert.match(row, /padding\s*:[^;]*10px/);
+  assert.equal(minHeight, 64);
+  assert.match(row, /border-radius\s*:\s*0/);
+  assert.match(row, /padding\s*:\s*8px\s+2px/);
   const arrow = cssRule(".open-arrow");
   assert.match(arrow, /align-self\s*:\s*center|justify-self\s*:\s*end/);
   const name = cssRule(".session-name");
   const summary = cssRule(".session-summary");
   const sessionPath = cssRule(".session-path");
   const agent = cssRule(".session-agent");
-  assert.match(name, /font-size\s*:\s*14px/);
+  assert.match(name, /font-size\s*:\s*12px/);
   assert.match(summary, /font-size\s*:\s*12px/);
-  assert.match(sessionPath, /font-size\s*:\s*10\.5px/);
-  assert.match(agent, /font-size\s*:\s*1[12]px/);
-  assert.match(sessionPath, /(?:ui-monospace|SFMono|Menlo|monospace)/);
+  assert.equal(cssProperty(".session-path", "font-size"), "10px");
+  assert.equal(cssProperty(".session-agent", "font-size"), "10px");
+  assert.equal(cssProperty(".session-path", "font-family"), "var(--font-mono)");
 });
 
-test("market workspace uses two columns for eight quotes", () => {
+test("market workspace uses four columns for eight quotes", () => {
   const grid = cssRule(".market-grid");
-  assert.match(grid, /grid-template-columns\s*:\s*repeat\(\s*2\s*,/);
-  assert.doesNotMatch(grid, /repeat\(\s*4\s*,/);
+  assert.match(grid, /grid-template-columns\s*:\s*repeat\(\s*4\s*,/);
   const name = cssRule(".market-quote-name");
   const price = cssRule(".market-quote-price");
   const change = cssRule(".market-quote-change");
   assert.match(name, /font-size\s*:\s*12px/);
-  assert.match(price, /font-size\s*:\s*15px/);
-  assert.match(price, /font-weight\s*:\s*600/);
+  assert.match(price, /font-size\s*:\s*20px/);
+  assert.match(price, /font-weight\s*:\s*520/);
   assert.match(change, /font-size\s*:\s*12px/);
-  assert.match(change, /font-weight\s*:\s*600/);
+  assert.match(change, /font-weight\s*:\s*560/);
 });
 
 test("settings workspace keeps readable type and 108px left nav", () => {
-  const form = cssRule("#settings form");
-  assert.match(form, /grid-template-columns\s*:\s*108px/);
+  assert.equal(cssProperty("#settings form", "grid-template-columns"), "108px minmax(0, 1fr)");
   const scale = cssRule(".scale-control");
   assert.match(scale, /font-size\s*:\s*13px/);
   const readable = [
@@ -580,11 +589,21 @@ test("settings workspace keeps readable type and 108px left nav", () => {
 
 test("shared workspaces close through the same overlay state", () => {
   const overlay = extract(js, "function setActiveBubbleOverlay", "\nfunction ");
-  for (const name of ["memo", "market", "quota", "settings"]) {
+  for (const name of ["sessions", "memo", "market", "quota", "settings"]) {
     assert.match(overlay, new RegExp(name));
   }
   assert.match(js, /Escape|keydown/);
   assert.match(js, /setActiveBubbleOverlay\(\s*null\s*\)/);
+});
+
+test("workspace close animates layout continuity and respects reduced motion", () => {
+  const overlay = extract(js, "function setActiveBubbleOverlay", "\nfunction ");
+  assert.match(overlay, /document\.startViewTransition/);
+  assert.match(overlay, /Boolean\(previous\)/);
+  assert.match(overlay, /prefers-reduced-motion:\s*reduce/);
+  assert.equal(cssProperty(".bubble", "view-transition-name"), "niulai-workspace");
+  assert.equal(cssProperty(".cow-stage", "view-transition-name"), "niulai-companion");
+  assert.match(css, /::view-transition-group\(niulai-workspace\)[\s\S]*?animation-duration\s*:\s*240ms/);
 });
 
 test("all visible workspaces stay inside the mouse interaction regions", () => {
@@ -669,27 +688,27 @@ test("escape on settings closes through closeSettings", () => {
   assert.match(keys, /settings/);
 });
 
-test("two-column market quotes do not restore a 4-column right border", () => {
-  assert.doesNotMatch(
-    css,
-    /\.market-quote:nth-child\(4n\)\s*\{[^}]*border-right\s*:\s*1px/
-  );
+test("four-column market clears the fourth divider and narrow layout clears every second divider", () => {
+  assert.match(cssRule(".market-quote:nth-child(4n)"), /border-right\s*:\s*0/);
+  const mediaStart = css.lastIndexOf("@media (max-width: 520px)");
+  const mediaOpen = css.indexOf("{", mediaStart);
+  const mediaClose = matchingBrace(css, mediaOpen);
+  const media = css.slice(mediaOpen + 1, mediaClose);
+  assert.match(media, /\.market-quote:nth-child\(2n\)\s*\{[^}]*border-right\s*:\s*0/s);
 });
 
-test("memo market quota and settings keep one stable workspace geometry", () => {
+test("memo market quota and settings share the expanded inline workspace geometry", () => {
   assert.equal(
     cssProperty(".bubble-overlay", "height"),
-    "min(420px, calc(100vh - 96px))"
+    "min(458px, calc(100vh - 96px))"
   );
   assert.equal(
     cssProperty("#settings", "height"),
-    "min(420px, calc(100vh - 96px))"
+    "min(458px, calc(100vh - 96px))"
   );
   assert.equal(cssProperty("#settings form", "height"), "100%");
-  assert.equal(
-    cssProperty(".quick-memo", "grid-template-rows"),
-    "auto auto auto auto minmax(156px, 1fr)"
-  );
+  assert.equal(cssProperty(".quick-memo", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr)");
+  assert.equal(cssProperty(".quick-memo", "grid-template-rows"), "minmax(0, 1fr)");
   assert.equal(
     cssProperty(".market-board", "grid-template-rows"),
     "auto minmax(0, 1fr)"
@@ -701,45 +720,55 @@ test("memo market quota and settings keep one stable workspace geometry", () => 
   assert.equal(cssProperty(".memo-list", "min-height"), "0");
   assert.equal(cssProperty(".memo-list", "max-height"), "none");
   assert.equal(cssProperty(".memo-list", "overflow-y"), "auto");
-  assert.equal(cssProperty(".market-grid", "align-content"), "start");
-  assert.equal(cssProperty(".market-grid", "grid-auto-rows"), "72px");
+  assert.equal(cssProperty(".market-grid", "align-content"), "stretch");
+  assert.equal(cssProperty(".market-grid", "grid-auto-rows"), "minmax(112px, 1fr)");
 
-  const mediaStart = css.lastIndexOf("@media (max-width: 400px)");
+  const mediaStart = css.lastIndexOf("@media (max-width: 520px)");
   assert.notEqual(mediaStart, -1, "missing narrow workspace media query");
   const mediaOpen = css.indexOf("{", mediaStart);
   const mediaClose = matchingBrace(css, mediaOpen);
   const media = css.slice(mediaOpen + 1, mediaClose);
   assert.match(
     media,
-    /\.bubble-overlay\s*,\s*\.quick-memo\s*\{[^}]*height\s*:\s*min\(400px,\s*calc\(100vh\s*-\s*76px\)\)/s
+    /\.bubble-overlay\s*,\s*#settings\s*,\s*\.quick-memo\s*\{[^}]*height\s*:\s*min\(520px,\s*calc\(100vh\s*-\s*76px\)\)/s
   );
-  assert.match(
-    media,
-    /#settings\s*\{[^}]*height\s*:\s*min\(400px,\s*calc\(100vh\s*-\s*76px\)\)/s
-  );
+  assert.match(media, /\.market-grid\s*\{[^}]*repeat\(2,/s);
+  assert.match(media, /\.quick-memo\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/s);
 });
 
 test("memo history reads as a distinct section with a readable heading", () => {
   const memo = extract(html, 'id="quickMemo"', "</aside>");
   assert.match(memo, /<section class="memo-history"[^>]*aria-labelledby="memoHistoryTitle"/);
-  assert.match(memo, /id="memoHistoryTitle"[^>]*>最近 Memo</);
+  assert.match(memo, /id="memoHistoryTitle"[^>]*>最近记下的</);
 
   assert.equal(cssProperty(".memo-history", "display"), "grid");
   assert.equal(cssProperty(".memo-history", "grid-template-rows"), "auto minmax(0, 1fr)");
   assert.equal(cssProperty(".memo-history", "min-height"), "0");
-  assert.equal(cssProperty(".memo-history", "background"), "var(--paper)");
-  assert.equal(cssProperty(".memo-history", "border-top"), "1px solid var(--hairline)");
-  assert.equal(cssProperty(".memo-list-heading", "font-size"), "14px");
-  assert.equal(cssProperty(".memo-list-heading", "font-weight"), "600");
-  assert.equal(cssProperty(".memo-list-heading", "color"), "var(--bone)");
+  assert.equal(cssProperty(".memo-history", "background"), "var(--workspace-paper)");
+  assert.equal(cssProperty(".memo-history", "border-top"), "0");
+  assert.equal(cssProperty(".memo-list-heading", "font-size"), "16px");
+  assert.equal(cssProperty(".memo-list-heading", "font-weight"), "520");
+  assert.equal(cssProperty(".memo-list-heading", "color"), "var(--workspace-text)");
 });
 
-test("memo composer and history share the workspace height", () => {
-  assert.equal(cssProperty("#memoText", "height"), "76px");
-  assert.equal(cssProperty("#memoText", "min-height"), "76px");
-  assert.equal(cssProperty(".reminder-presets", "padding"), "10px 16px 0");
+test("memo composer and history use a roomy desktop split", () => {
+  assert.match(html, /<section class="memo-compose">/);
+  assert.equal(cssProperty("#memoText", "height"), "100%");
+  assert.equal(cssProperty("#memoText", "min-height"), "112px");
+  assert.equal(cssProperty(".reminder-presets", "padding"), "12px 24px 0");
   assert.equal(cssProperty(".reminder-presets button", "min-height"), "30px");
-  assert.equal(cssProperty(".memo-save-row", "min-height"), "46px");
+  assert.equal(cssProperty(".memo-save-row", "min-height"), "58px");
+});
+
+test("reduced motion removes workspace width and content transitions", () => {
+  const mediaStart = baseCss.lastIndexOf("@media (prefers-reduced-motion: reduce)");
+  const mediaOpen = baseCss.indexOf("{", mediaStart);
+  const mediaClose = matchingBrace(baseCss, mediaOpen);
+  const media = baseCss.slice(mediaOpen + 1, mediaClose);
+  assert.match(media, /\.bubble/);
+  assert.match(media, /\.bubble-overlay/);
+  assert.match(media, /animation\s*:\s*none\s*!important/);
+  assert.match(media, /transition\s*:\s*none\s*!important/);
 });
 
 test("settings footer spans the workspace instead of expanding the narrow nav column", () => {

@@ -22,6 +22,7 @@ const {
 } = window.niulQuotaView;
 
 const APPEARANCE_STORAGE_KEY = "niulai.appearance";
+const SESSION_STATUS_PRIORITY = Object.freeze({ waiting: 0, working: 1, idle: 2, offline: 3 });
 
 const STATUS_CHANGE = {
   working: (row) => `${sessionName(row)} 套上犁了。`,
@@ -152,14 +153,14 @@ let petMode = "cow";
 let currentSkinId = localStorage.getItem("niulai.cowSkin") || "original";
 let activeRuntimeFilter = "all";
 localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
-const STATUS_FILTER_VERSION = "3";
-const PERSISTED_STATUS_FILTERS = new Set(["working", "waiting", "idle", "offline"]);
+const STATUS_FILTER_VERSION = "4";
+const PERSISTED_STATUS_FILTERS = new Set(["all", "working", "waiting", "idle", "offline"]);
 function restoreStatusFilter() {
   const stored =
     localStorage.getItem("niulai.statusFilterVersion") === STATUS_FILTER_VERSION
       ? localStorage.getItem("niulai.statusFilter")
       : "";
-  return PERSISTED_STATUS_FILTERS.has(stored) ? stored : "waiting";
+  return PERSISTED_STATUS_FILTERS.has(stored) ? stored : "all";
 }
 let activeStatusFilter = restoreStatusFilter();
 localStorage.setItem("niulai.statusFilter", activeStatusFilter);
@@ -171,6 +172,8 @@ let pendingMenuBarFocusId = "";
 let pendingMenuBarFocusExpiresAt = 0;
 let activeBubbleOverlay = null;
 let overlayReturnFocus = null;
+let activeWorkspaceTransition = null;
+let workspaceTransitionSequence = 0;
 let lastListRenderKey = "";
 let draftCustom = [];
 let scanTimer;
@@ -534,7 +537,11 @@ function applyAppearance(theme, { persist = true } = {}) {
 
 function setActiveBubbleOverlay(name) {
   const next =
-    name === "memo" || name === "market" || name === "quota" || name === "settings"
+    name === "sessions" ||
+    name === "memo" ||
+    name === "market" ||
+    name === "quota" ||
+    name === "settings"
       ? name
       : null;
   const previous = activeBubbleOverlay;
@@ -550,29 +557,72 @@ function setActiveBubbleOverlay(name) {
     applyDisplayScale(config);
   }
   activeBubbleOverlay = next;
-  document.getElementById("quickMemo").hidden = activeBubbleOverlay !== "memo";
-  document.getElementById("marketBoard").hidden = activeBubbleOverlay !== "market";
-  document.getElementById("quotaBoard").hidden = activeBubbleOverlay !== "quota";
-  document.getElementById("settings").hidden = activeBubbleOverlay !== "settings";
-  for (const [buttonId, overlayName] of [
-    ["memoButton", "memo"],
-    ["marketButton", "market"],
-    ["gear", "settings"],
-  ]) {
-    const button = document.getElementById(buttonId);
-    const selected = activeBubbleOverlay === overlayName;
-    button.classList.toggle("is-active", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  }
-  document.getElementById("tokenStrip").setAttribute(
-    "aria-expanded",
-    String(activeBubbleOverlay === "quota")
-  );
-  for (const id of ["summaryRail", "bubbleBody"]) {
-    const covered = document.getElementById(id);
-    const hiddenByWorkspace = Boolean(activeBubbleOverlay);
-    covered.inert = hiddenByWorkspace;
-    covered.setAttribute("aria-hidden", String(hiddenByWorkspace));
+  const transitionSequence = ++workspaceTransitionSequence;
+  const bubble = document.getElementById("bubble");
+  const sessionsOpen = activeBubbleOverlay === "sessions";
+  const workspaceOpen = Boolean(activeBubbleOverlay);
+  const applyWorkspaceDom = () => {
+    if (transitionSequence !== workspaceTransitionSequence) return;
+    bubble.classList.toggle("is-workspace-open", workspaceOpen);
+    bubble.dataset.surface = activeBubbleOverlay || "compact";
+    document.getElementById("pet").classList.toggle("is-workspace-open", workspaceOpen);
+    document.getElementById("quickMemo").hidden = activeBubbleOverlay !== "memo";
+    document.getElementById("marketBoard").hidden = activeBubbleOverlay !== "market";
+    document.getElementById("quotaBoard").hidden = activeBubbleOverlay !== "quota";
+    document.getElementById("settings").hidden = activeBubbleOverlay !== "settings";
+    for (const [buttonId, overlayName] of [
+      ["memoButton", "memo"],
+      ["marketButton", "market"],
+      ["gear", "settings"],
+    ]) {
+      const button = document.getElementById(buttonId);
+      const selected = activeBubbleOverlay === overlayName;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    }
+    document.getElementById("tokenStrip").setAttribute(
+      "aria-expanded",
+      String(activeBubbleOverlay === "quota")
+    );
+    document.getElementById("expandSessions").setAttribute("aria-expanded", String(sessionsOpen));
+    document.getElementById("toggleBubble").setAttribute(
+      "aria-label",
+      workspaceOpen ? "回到常态" : "收起或展开气泡"
+    );
+    document.getElementById("toggleBubble").title = workspaceOpen ? "回到常态" : "收起气泡";
+    for (const id of ["summaryRail", "bubbleBody"]) {
+      const covered = document.getElementById(id);
+      const hiddenByWorkspace = workspaceOpen && !sessionsOpen;
+      covered.inert = hiddenByWorkspace;
+      covered.setAttribute("aria-hidden", String(hiddenByWorkspace));
+    }
+    if (latestSnapshot && (previous === "sessions" || sessionsOpen)) {
+      renderStatusFilters(latestSnapshot.rows);
+      renderSummary(latestSnapshot);
+      renderSessionRows(latestSnapshot);
+    }
+    window.requestAnimationFrame(syncInteractiveRegions);
+  };
+  activeWorkspaceTransition?.skipTransition?.();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const shouldAnimateClose =
+    Boolean(previous) &&
+    !workspaceOpen &&
+    !reducedMotion &&
+    typeof document.startViewTransition === "function";
+  let closeTransition = null;
+  if (shouldAnimateClose) {
+    closeTransition = document.startViewTransition(applyWorkspaceDom);
+    activeWorkspaceTransition = closeTransition;
+    closeTransition.finished
+      .catch(() => {})
+      .finally(() => {
+        if (activeWorkspaceTransition === closeTransition) activeWorkspaceTransition = null;
+        window.requestAnimationFrame(syncInteractiveRegions);
+      });
+  } else {
+    activeWorkspaceTransition = null;
+    applyWorkspaceDom();
   }
   if (activeBubbleOverlay) {
     setPetMenuOpen(false);
@@ -581,11 +631,14 @@ function setActiveBubbleOverlay(name) {
   if (previous && !activeBubbleOverlay) {
     const returnTarget = overlayReturnFocus;
     overlayReturnFocus = null;
-    window.requestAnimationFrame(() => {
+    const restoreFocus = () => window.requestAnimationFrame(() => {
+      if (activeBubbleOverlay) return;
       if (returnTarget instanceof HTMLElement && returnTarget.isConnected) {
         returnTarget.focus();
       }
     });
+    if (closeTransition) closeTransition.finished.catch(() => {}).then(restoreFocus);
+    else restoreFocus();
   }
 }
 
@@ -973,6 +1026,17 @@ function closeMemoPanel() {
   setActiveBubbleOverlay(null);
 }
 
+function openSessionPanorama(status = "all") {
+  if (document.getElementById("bubble").classList.contains("is-collapsed")) {
+    setBubbleCollapsed(false, { silent: true });
+  }
+  activeStatusFilter = PERSISTED_STATUS_FILTERS.has(status) ? status : "all";
+  activeRuntimeFilter = "all";
+  localStorage.setItem("niulai.statusFilter", activeStatusFilter);
+  localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
+  setActiveBubbleOverlay("sessions");
+}
+
 function openMarketPanel() {
   if (config?.market?.enabled === false) return;
   if (document.getElementById("bubble").classList.contains("is-collapsed")) {
@@ -1108,6 +1172,13 @@ async function saveQuickMemo() {
 function statusCaptionText(snapshot) {
   const counts = snapshot.counts || {};
   const filter = activeStatusFilter === "all" ? "all" : activeStatusFilter;
+  if (filter === "all") {
+    if (counts.waiting) return `有 ${counts.waiting} 个任务等你回来接着走。`;
+    if (counts.working) return `有 ${counts.working} 个任务正在进行。`;
+    if (counts.idle) return `有 ${counts.idle} 个任务暂时空闲。`;
+    if (counts.offline) return `有 ${counts.offline} 个任务暂未连接。`;
+    return "暂时没有需要盯着的任务。";
+  }
   const count = Number(counts[filter] || 0);
   if (filter === "waiting") {
     return count ? `有 ${count} 个任务等你回来接着走。` : "暂时没有任务等你回来接着走。";
@@ -1132,6 +1203,10 @@ function renderSummary(snapshot) {
   document.getElementById("offlineCount").textContent = counts.offline || 0;
   document.getElementById("statusLine").textContent = "刚刚巡视";
   document.getElementById("statusCaption").textContent = statusCaptionText(snapshot);
+  document.getElementById("sessionWorkspaceTitle").textContent =
+    `${snapshot.rows.length} 个 Session，都在这里`;
+  document.getElementById("sessionScanTime").textContent =
+    `最后扫描 · ${timeAgo(snapshot.scannedAt || Date.now())}`;
 }
 
 function renderTokenUsage(snapshot) {
@@ -1218,7 +1293,7 @@ function renderStatusFilters(rows) {
   }, {});
   for (const button of rail.querySelectorAll("[data-status-filter]")) {
     const id = button.dataset.statusFilter;
-    const active = id === activeStatusFilter;
+    const active = activeBubbleOverlay === "sessions" && id === activeStatusFilter;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
     const count = document.getElementById(`${id}Count`);
@@ -1226,20 +1301,36 @@ function renderStatusFilters(rows) {
   }
 }
 
+function orderedSessionRows(rows) {
+  return [...rows].sort((left, right) => {
+    const statusDelta =
+      (SESSION_STATUS_PRIORITY[left.status] ?? 9) -
+      (SESSION_STATUS_PRIORITY[right.status] ?? 9);
+    if (statusDelta) return statusDelta;
+    return Number(right.activityAt || right.mtime || 0) - Number(left.activityAt || left.mtime || 0);
+  });
+}
+
 function renderSessionRows(snapshot) {
   const list = document.getElementById("list");
   stopCowPointing();
+  const panoramaOpen = activeBubbleOverlay === "sessions";
   const runtimeRows =
     activeRuntimeFilter === "all"
       ? snapshot.rows
       : snapshot.rows.filter((row) => row.runtime === activeRuntimeFilter);
-  const rows =
-    activeStatusFilter === "all"
-      ? runtimeRows
-      : runtimeRows.filter((row) => row.status === activeStatusFilter);
+  const filteredRows =
+    panoramaOpen && activeStatusFilter !== "all"
+      ? runtimeRows.filter((row) => row.status === activeStatusFilter)
+      : runtimeRows;
+  const orderedRows = orderedSessionRows(filteredRows);
+  const rows = panoramaOpen ? orderedRows : orderedSessionRows(snapshot.rows).slice(0, 2);
+  list.classList.toggle("is-panorama", panoramaOpen);
   document.getElementById("sessionHeading").textContent =
-    STATUS_HEADING[activeStatusFilter] || "Session";
+    panoramaOpen ? STATUS_HEADING[activeStatusFilter] || "全部 Session" : "等你优先";
   document.getElementById("sessionTotal").textContent = `${rows.length} 个`;
+  document.getElementById("expandSessionsLabel").textContent =
+    `查看全部 ${snapshot.rows.length} 个 Session`;
 
   if (!rows.length) {
     const filtered = snapshot.rows.length > 0;
@@ -1249,7 +1340,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>当前筛选下没有 Session</strong>
-          <span>当前只看「${STATUS_TEXT[activeStatusFilter] || STATUS_TEXT.waiting}」。上面还有其他状态，或点「全部」看完整巡视。</span>
+          <span>当前只看「${STATUS_TEXT[activeStatusFilter] || "全部"}」。再点一次状态标签即可回到完整巡视。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="show-all">查看全部</button>
           </div>
@@ -1270,7 +1361,7 @@ function renderSessionRows(snapshot) {
       <li class="empty-state">
         <div>
           <strong>暂时没发现 Session</strong>
-          <span>默认只看「${STATUS_TEXT.waiting}」。打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
+          <span>打开 ${runtimeSummary} 后，牛来会在下次巡视看见。隐藏后按 ⌘⇧U；点齿轮可开关 Runtime。</span>
           <div class="empty-actions">
             <button type="button" class="empty-action" data-empty-action="open-settings">打开设置</button>
           </div>
@@ -1297,19 +1388,20 @@ function renderSessionRows(snapshot) {
           : row.runtime === "cursor"
             ? " · Token 未公开"
             : "";
+      const statusLabel = STATUS_TEXT[row.status] || row.status;
       return `
         <li class="session-row ${escapeHtml(row.status)}" data-id="${escapeHtml(row.id)}"
             data-status="${escapeHtml(row.status)}" tabindex="0" role="button"
             title="${escapeHtml(stateReason)}${escapeHtml(tokenText)}"
             aria-label="打开 ${escapeHtml(row.label)} ${escapeHtml(displayName)}，${escapeHtml(stateText)}${escapeHtml(tokenText)}">
-          <span class="session-rail" aria-hidden="true"></span>
+          <span class="session-state" aria-hidden="true"><i></i>${escapeHtml(statusLabel)}</span>
           <span class="session-copy">
             <span class="session-identity">
               <strong class="session-name">${escapeHtml(displayName)}</strong>
-              <span class="session-summary" title="${escapeHtml(workSummary)}">${escapeHtml(workSummary)}</span>
+              <span class="session-path" title="${escapeHtml(detail)}">${escapeHtml(compactDisplayPath(detail))}</span>
             </span>
             <span class="session-work">
-              <span class="session-path" title="${escapeHtml(detail)}">${escapeHtml(compactDisplayPath(detail))}</span>
+              <strong class="session-summary" title="${escapeHtml(workSummary)}">${escapeHtml(workSummary)}</strong>
               <span class="session-agent">${escapeHtml(row.label)} · ${escapeHtml(timeAgo(row.activityAt || row.mtime))}</span>
             </span>
           </span>
@@ -1367,7 +1459,7 @@ function focusMenuBarSession(id) {
   pendingMenuBarFocusId = String(id || "");
   pendingMenuBarFocusExpiresAt = Date.now() + 10_000;
   if (!pendingMenuBarFocusId) return;
-  setActiveBubbleOverlay(null);
+  setActiveBubbleOverlay("sessions");
   setPetMenuOpen(false);
   setBubbleCollapsed(false, { silent: true });
   activeStatusFilter = "waiting";
@@ -1476,7 +1568,7 @@ function focusHerdSession(targetId) {
   if (!latestSnapshot?.rows?.some((row) => String(row.id) === String(targetId))) {
     syncHerdPreviewRows();
   }
-  setActiveBubbleOverlay(null);
+  setActiveBubbleOverlay("sessions");
   setPetMenuOpen(false);
   setBubbleCollapsed(false, { silent: true });
   activeStatusFilter = "all";
@@ -2249,6 +2341,11 @@ function maybeShowFirstRunHint(snapshot) {
 
 function toggleBubble() {
   const bubble = document.getElementById("bubble");
+  if (activeBubbleOverlay) {
+    setActiveBubbleOverlay(null);
+    showCaption("回到常态。", 1000);
+    return;
+  }
   const collapsing = !bubble.classList.contains("is-collapsed");
   if (collapsing) {
     setActiveBubbleOverlay(null);
@@ -3111,11 +3208,14 @@ function bindTopControls() {
   document.getElementById("summaryRail").addEventListener("click", (event) => {
     const button = event.target.closest("[data-status-filter]");
     if (!button || !latestSnapshot) return;
-    activeStatusFilter = button.dataset.statusFilter;
-    localStorage.setItem("niulai.statusFilter", activeStatusFilter);
-    renderStatusFilters(latestSnapshot.rows);
-    renderSummary(latestSnapshot);
-    renderSessionRows(latestSnapshot);
+    const requested = button.dataset.statusFilter;
+    const next = activeBubbleOverlay === "sessions" && activeStatusFilter === requested
+      ? "all"
+      : requested;
+    openSessionPanorama(next);
+  });
+  document.getElementById("expandSessions").addEventListener("click", () => {
+    openSessionPanorama("all");
   });
   document.getElementById("list").addEventListener("click", (event) => {
     const action = event.target.closest("[data-empty-action]");
@@ -3123,16 +3223,7 @@ function bindTopControls() {
     event.preventDefault();
     event.stopPropagation();
     if (action.dataset.emptyAction === "show-all") {
-      activeStatusFilter = "all";
-      activeRuntimeFilter = "all";
-      localStorage.setItem("niulai.statusFilter", activeStatusFilter);
-      localStorage.setItem("niulai.runtimeFilter", activeRuntimeFilter);
-      if (latestSnapshot) {
-        renderRuntimeFilters(latestSnapshot.rows);
-        renderStatusFilters(latestSnapshot.rows);
-        renderSummary(latestSnapshot);
-        renderSessionRows(latestSnapshot);
-      }
+      openSessionPanorama("all");
       return;
     }
     if (action.dataset.emptyAction === "open-settings") {
@@ -3213,6 +3304,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 });
 
 function openMainSurface(surface) {
+  if (surface === "sessions") {
+    openSessionPanorama("all");
+    return;
+  }
   if (surface === "memo") {
     openMemoPanel();
     return;

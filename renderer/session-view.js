@@ -4,18 +4,18 @@
   else global.niulaiSessionView = api;
 })(typeof globalThis === "object" ? globalThis : this, function createSessionViewModule() {
   const STATUS_TEXT = Object.freeze({
-    working: "拉犁",
-    waiting: "停犁",
-    idle: "吃草",
-    offline: "回棚",
+    working: "工作中",
+    waiting: "等你",
+    idle: "闲置",
+    offline: "不在线",
   });
 
   const STATUS_HEADING = Object.freeze({
-    working: "拉犁",
-    waiting: "停犁优先",
-    idle: "吃草",
-    offline: "回棚",
-    all: "所有会话",
+    working: "工作中的 Session",
+    waiting: "等你处理",
+    idle: "暂时闲置",
+    offline: "暂未连接",
+    all: "全部 Session",
   });
 
   function waitWhyOf(row) {
@@ -69,8 +69,8 @@
   function rowStateText(row) {
     const parts = [];
     if (row.status === "waiting") {
-      if (waitWhyOf(row) === "allow") parts.push("停犁 · 等允许");
-      else if (waitWhyOf(row) === "choose") parts.push("停犁 · 等你选");
+      if (waitWhyOf(row) === "allow") parts.push("等你允许");
+      else if (waitWhyOf(row) === "choose") parts.push("等你选择");
       else parts.push(row.statusText || STATUS_TEXT.waiting);
     } else {
       parts.push(row.statusText || STATUS_TEXT[row.status] || row.status);

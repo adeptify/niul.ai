@@ -17,7 +17,7 @@
   </head>
   <body>
     <div id="pet" data-mood="waiting">
-    <main class="bubble" id="bubble" aria-label="AI Session 状态">
+    <main class="bubble" id="bubble" data-surface="compact" aria-label="AI Session 状态">
         <header class="bubble-head">
           <div class="brand-lockup" aria-label="牛来">
             <img src="../assets/niulai-product-logo-v1.png" alt="" />
@@ -91,18 +91,26 @@
           </button>
         </div>
 
-        <div class="summary-rail" id="summaryRail" aria-label="Session 汇总">
+        <header class="session-workspace-head" id="sessionWorkspaceHead">
+          <div>
+            <span class="workspace-kicker">SESSION 全景</span>
+            <h2 id="sessionWorkspaceTitle">全部 Session，都在这里</h2>
+          </div>
+          <p><i></i><span id="sessionScanTime">最后扫描 · 刚刚</span></p>
+        </header>
+
+        <div class="summary-rail" id="summaryRail" aria-label="Session 状态汇总">
           <button type="button" data-status-filter="working" class="summary-item working" aria-pressed="false">
-            <i></i><b id="workingCount">0</b><em>拉犁</em>
+            <i></i><b id="workingCount">0</b><em>工作中</em>
           </button>
-          <button type="button" data-status-filter="waiting" class="summary-item waiting is-priority" aria-pressed="true">
-            <i></i><b id="waitingCount">0</b><em>停犁</em>
+          <button type="button" data-status-filter="waiting" class="summary-item waiting is-priority" aria-pressed="false">
+            <i></i><b id="waitingCount">0</b><em>等你</em>
           </button>
           <button type="button" data-status-filter="idle" class="summary-item idle" aria-pressed="false">
-            <i></i><b id="idleCount">0</b><em>吃草</em>
+            <i></i><b id="idleCount">0</b><em>闲置</em>
           </button>
           <button type="button" data-status-filter="offline" class="summary-item offline" aria-pressed="false">
-            <i></i><b id="offlineCount">0</b><em>回棚</em>
+            <i></i><b id="offlineCount">0</b><em>不在线</em>
           </button>
         </div>
 
@@ -125,6 +133,14 @@
               <span></span><span></span><span></span>
             </li>
           </ul>
+          <button class="session-expand" id="expandSessions" type="button" aria-expanded="false" aria-controls="bubbleBody">
+            <span id="expandSessionsLabel">查看全部 Session</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg>
+          </button>
+          <footer class="session-workspace-footer">
+            <span>默认显示全部状态，等你优先置顶</span>
+            <span>点击任意 Session 回到对应 Runtime</span>
+          </footer>
           <button class="token-strip" id="tokenStrip" type="button" aria-expanded="false" aria-controls="quotaBoard" title="查看今日 Token 与订阅额度">
             <span class="token-mark" aria-hidden="true">T</span>
             <span class="token-copy">
@@ -138,9 +154,9 @@
 
         <section id="marketBoard" class="market-board bubble-overlay" hidden aria-labelledby="marketTitle">
           <header class="market-board-head opaque-panel-head">
-            <div>
-              <span class="market-mark" aria-hidden="true">盘</span>
-              <strong id="marketTitle">大盘</strong>
+            <div class="workspace-title-group">
+              <span class="workspace-kicker">大盘</span>
+              <strong id="marketTitle">八个指数，一眼扫完</strong>
             </div>
             <span class="market-meta" id="marketMeta">实时行情 · 正在看盘</span>
             <button class="icon-button light" id="closeMarket" type="button" aria-label="关闭大盘">
@@ -177,29 +193,33 @@
         </section>
 
         <aside id="quickMemo" class="quick-memo bubble-overlay" hidden aria-labelledby="memoTitle">
-          <header class="memo-head">
-            <div>
-              <h2 id="memoTitle">牛记</h2>
-              <p>记在本机，到点让牛来提醒你。</p>
+          <section class="memo-compose">
+            <header class="memo-head">
+              <div class="workspace-title-group">
+                <span class="workspace-kicker">牛记</span>
+                <h2 id="memoTitle">先记下来，牛替你惦记</h2>
+                <p>只存在本机，到点让牛来提醒你。</p>
+              </div>
+              <button class="icon-button light" id="closeMemo" type="button" aria-label="关闭快捷记事">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+              </button>
+            </header>
+            <label class="memo-field-label" for="memoText">要记住什么？</label>
+            <textarea id="memoText" maxlength="1000" placeholder="写下一个念头、待办，或稍后要接着做的事…"></textarea>
+            <div class="reminder-presets" aria-label="提醒时间">
+              <button type="button" class="is-active" data-remind="0">仅记录</button>
+              <button type="button" data-remind="900000">15 分钟</button>
+              <button type="button" data-remind="3600000">1 小时</button>
+              <button type="button" data-remind="tomorrow">明早 9 点</button>
             </div>
-            <button class="icon-button light" id="closeMemo" type="button" aria-label="关闭快捷记事">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
-            </button>
-          </header>
-          <textarea id="memoText" maxlength="1000" placeholder="要记住什么？"></textarea>
-          <div class="reminder-presets" aria-label="提醒时间">
-            <button type="button" class="is-active" data-remind="0">仅记录</button>
-            <button type="button" data-remind="900000">15 分钟</button>
-            <button type="button" data-remind="3600000">1 小时</button>
-            <button type="button" data-remind="tomorrow">明早 9 点</button>
-          </div>
-          <div class="memo-save-row">
-            <span id="memoMessage">未设置提醒</span>
-            <button class="button primary" id="saveMemo" type="button">记下来</button>
-          </div>
+            <div class="memo-save-row">
+              <span id="memoMessage">未设置提醒</span>
+              <button class="button primary" id="saveMemo" type="button">记下来</button>
+            </div>
+          </section>
           <section class="memo-history" aria-labelledby="memoHistoryTitle">
             <div class="memo-list-heading">
-              <span id="memoHistoryTitle">最近 Memo</span>
+              <span id="memoHistoryTitle">最近记下的</span>
               <span id="memoCount">0</span>
             </div>
             <div class="memo-list" id="memoList"></div>
